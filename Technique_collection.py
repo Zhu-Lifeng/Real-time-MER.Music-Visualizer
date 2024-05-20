@@ -17,3 +17,29 @@ for element in midi_stream.flatten().notes[0:20]:
 
 # Audio Part => the Input
 
+!pip install librosa
+!pip install numpy
+!pip install matplotlib
+
+import librosa
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+# to_stream, waiting to be learned
+stream = librosa.stream(file_path,block_length=256,frame_length=4096,hop_length=1024)
+
+# encoding
+y,sr=librosa.load('file_path')
+# y: audio time series (np.ndarray[shape=(n,) or (...,n)(multi-channel)])
+# sr: sampling rate (number >0)
+pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr, threshold=0.1 )
+# return the active pitches and their corresponse magnitudes
+notes=[]
+a = 1000
+B=[pitches[:,a],magnitudes[:,a]]
+for i in range(pitches.shape[0]):
+  if pitches[i,a] != 0:
+    notes.append([pitches[i,a],magnitudes[i,a]] )
+
+print(notes)
