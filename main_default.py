@@ -31,15 +31,13 @@ for pitch, duration in notes_midi[0:10]:
 
 # Audio: Input processing
 audio_file='/content/drive/MyDrive/MSC Project/MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.wav'
-y, sr = librosa.load(audio_file)
-
-pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr, threshold=0.01)
+y, sr = librosa.load(audio_file,sr=44100)
+pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr,n_fft=4410,threshold=0.1)
 notes_audio=[]
-for j in range(pitches.shape[1]):
-  N=[]
-  for i in range(pitches.shape[0]):
-    if pitches[i,j] != 0:
-      N.append([pitches[i,j],magnitudes[i,j]])
-  notes_audio.append(N)
-for X in notes_audio[10:50]:
-    print(X)
+for i in range(magnitudes.shape[1]):
+  column = magnitudes[:, i]
+  sorted_indices = np.argsort(column)[::-1]
+  top_indices = sorted_indices[:20]
+  top_freqs = pitches[top_indices, i]
+  top_mags = column[top_indices]
+  notes_audio.append(np.column_stack((np.array(top_freqs),np.array(top_mags))))
