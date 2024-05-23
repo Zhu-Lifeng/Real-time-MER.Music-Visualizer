@@ -16,7 +16,11 @@ midi_file = '/content/drive/MyDrive/MSC Project/MIDI-Unprocessed_SMF_02_R1_2004_
 midi_stream = converter.parse(midi_file)
 
 notes_midi=[]
-for element in midi_stream.flatten().notes:
+for element in midi_stream.flatten():
+  if isinstance(element, tempo.MetronomeMark):
+    MM = element.number
+  if isinstance(element,note.Rest):
+    notes_midi.append([[],element.duration.quarterLength])
   if isinstance(element, note.Note):
     notes_midi.append([[element.pitch.nameWithOctave],element.duration.quarterLength])
   if isinstance(element,chord.Chord):
@@ -25,6 +29,7 @@ for element in midi_stream.flatten().notes:
       chords.append(N.pitch.nameWithOctave)
     notes_midi.append([chords,element.duration.quarterLength])
 
+print(MM)
 for pitch, duration in notes_midi[0:10]:
     print(pitch,duration)
 
