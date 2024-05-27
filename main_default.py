@@ -46,3 +46,27 @@ for i in range(magnitudes.shape[1]):
   top_freqs = pitches[top_indices, i]
   top_mags = column[top_indices]
   notes_audio.append(np.column_stack((np.array(top_freqs),np.array(top_mags))))
+
+# Model
+import torch
+class RNN(torch.nn.Module):
+  def __init__(self,input_seq,hidden_size):
+    super(RNN, self).__init__()
+    self.seq_length = 88
+    self.WI = torch.nn.Parameter(torch.randn(seq_length,hiden_size)*0.01)
+    self.WR = torch.nn.Parameter(torch.randn(hiden_size,hiden_size)*0.01)
+    self.b = torch.nn.Parameter(torch.zeros(hiden_size))
+    self.linear = torch.nn.Linear(hidden_size, 89)
+  def initial_state(self, batch_size):
+    return torch.zeros(1, batch_size, self.hiden_size)
+  
+  def forward(self, X, state=None):
+    if state is None:
+      state = self.initial_state(X.shape[1])
+    outputs=[]
+    for element in X:
+      state = torch.tanh(torch.matmul(element,self.WI)+torch.matmul(state,self.WR)+self.b)
+      outputs.append(state)
+    outputs = torch.stack(outputs)
+    outputs = self.linear(outputs)
+    return outputs
