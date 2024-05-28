@@ -78,24 +78,79 @@ print(notes_audio[5000,:])
 
 # Model
 import torch
-class RNN(torch.nn.Module):
-  def __init__(self,input_seq,hidden_size):
-    super(RNN, self).__init__()
+class MRNN(torch.nn.Module):
+  def __init__(self,hidden_size):
+    super(MRNN, self).__init__()
     self.seq_length = 88
-    self.WI = torch.nn.Parameter(torch.randn(seq_length,hiden_size)*0.01)
-    self.WR = torch.nn.Parameter(torch.randn(hiden_size,hiden_size)*0.01)
-    self.b = torch.nn.Parameter(torch.zeros(hiden_size))
-    self.linear = torch.nn.Linear(hidden_size, 89)
+    self.WI = torch.nn.Parameter(torch.randn(self.seq_length,hidden_size)*0.01).float()
+    self.WR = torch.nn.Parameter(torch.randn(hidden_size,hidden_size)*0.01).float()
+    self.b = torch.nn.Parameter(torch.zeros(hidden_size)).float()
+    self.linear = torch.nn.Linear(hidden_size, 88*3)
   def initial_state(self, batch_size):
-    return torch.zeros(1, batch_size, self.hiden_size)
-  
+    return torch.zeros(1, batch_size, hidden_size).float()
+
   def forward(self, X, state=None):
     if state is None:
-      state = self.initial_state(X.shape[1])
+      state = self.initial_state(X.shape[1]).float()
     outputs=[]
     for element in X:
-      state = torch.tanh(torch.matmul(element,self.WI)+torch.matmul(state,self.WR)+self.b)
-      outputs.append(state)
+      #print('element:',element.shape)
+      state = torch.tanh(torch.matmul(element.float(),self.WI)+torch.matmul(state.float(),self.WR)+self.b)
+      outputs.append(state.float())
+      #print('state:',state.shape)
     outputs = torch.stack(outputs)
+    #print(outputs.shape)
+    #print(state.shape)
+    #state = state.reshape(1, state.shape[0], state.shape[1])
     outputs = self.linear(outputs)
-    return outputs
+    return state, outputs
+
+def seq_generater(X,Y,batch_size,num_steps):
+  len_macro_subseq = (len(X)-1)//batch_size
+  num_elements = len_macro_subseq*batch_size
+  Xs = torch.tensor(X[:num_elements,:])
+  Ys = torch.tensor(Y[:num_elements,:])
+  num_subseqs = Xs.shape[0] // num_steps
+  for i in range(0,num_subseqs * num_steps, num_steps):
+    XX=Xs[i:i+num_steps , :].float()
+    YY=Ys[i:i+num_steps , :].float()
+    yield XX,YY
+def init_weights(m):
+  if type(m)== torch.nn.Linear or type(m) == torch.nn.Conv2d:
+    torch.nn.init.xavier_uniform_(m.weight)
+
+hidden_size=400
+lr=0.001
+num_epochs=20
+batch_size=256
+num_steps=500
+
+ScT=MRNN(hidden_size).to(device)
+ScT.apply(init_weights)
+
+loss = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(ScT.parameters(), lr=lr, betas=(0.8, 0.8))
+epoch_losses = []
+for epoch in range(num_epochs):
+  print(f'\nEpoch {epoch + 1}/{num_epochs}.')
+  Train_iter=seq_generater(notes_audio,notes_midi,batch_size,num_steps)
+  state = ScT.initial_state(batch_size).to(device)
+  losses=[]
+  for X,Y in Train_iter:
+    X, Y = X.to(device), Y.to(device)
+    state, outputs = ScT(X,state)
+    Y_flat = Y.reshape(-1).long()
+    outputs_flat=outputs.reshape(-1,outputs.shape[2])
+    l = loss(outputs_flat,Y_flat)
+    optimizer.zero_grad()
+    l.backward()
+    optimizer.step()
+    losses.append(float(l))
+    state = state.clone().detach()
+  epoch_losses.append(np.mean(losses))
+  print(f'Epoch {epoch + 1}/{num_epochs}. Loss: {epoch_losses[-1]:.5f}.')
+
+plt.plot(epoch_losses)
+plt.xlabel('Epoch')
+plt.ylabel('Average cross entropy loss')
+plt.show()
