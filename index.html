@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE Data Stream Demo</title>
+</head>
+<body>
+    <h1>Received Data:</h1>
+    <ul id="data"></ul>
+    <script>
+        var source = new EventSource('/stream');
+        source.onmessage = function(event) {
+            console.log(event.data);
+            if (event.data === "Done")
+            { source.close();}
+            else
+            {var li = document.createElement('li');
+            li.textContent = event.data;
+            document.getElementById('data').appendChild(li);}
+        };
+    </script>
+</body>
+</html>
