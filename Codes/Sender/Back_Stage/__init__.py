@@ -33,6 +33,7 @@ def Sender_Creation():
             file.save(file_path)
             audio, sr = librosa.load( file_path , sr=44100)
             flash('File successfully uploaded and loaded')
+
             return render_template('S_index.html')
 
 
@@ -44,8 +45,8 @@ def Sender_Creation():
     def send_data():
         global audio, sr
         if request.method == 'POST':
-            target_ip = '127.0.0.1' #request.form.get('target_ip')
-            port = '8001' #request.form.get('port')
+            target_ip = request.form.get('target_ip')
+            port = request.form.get('port')
             url = f'http://{target_ip}:{port}/audio_fragment_receive'
             headers = {'Content-Type': 'application/json'}
             responses = []
