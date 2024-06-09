@@ -77,7 +77,7 @@ def Processor_Creation():
                     print("Sent")
                     responses.append(response.status_code)
             else:
-                time.sleep(0.5)  # 等待更多数据到达
+                time.sleep(0.25)  # 等待更多数据到达
 
 
     @app.route('/audio_fragment_receive', methods=['POST'])
@@ -86,13 +86,21 @@ def Processor_Creation():
         data = request.get_json()
         long_term_store += data
 
-        if not processing_event.is_set():
-            processing_event.set()  # 标记处理事件为已设置
-            target_ip = '127.0.0.1'
-            port = '8002'
-            threading.Thread(target=process_data, args=(target_ip, port)).start()
-
-
         return {"status": "Data received"}, 200
+
+
+    @app.route('/audio_Msg_send', methods=['GET', 'POST'])
+    def send_Msg():
+        if request.method == 'POST':
+            if not processing_event.is_set():
+                processing_event.set()  # 标记处理事件为已设置
+                target_ip = request.form.get('target_ip')
+                port = request.form.get('port')
+                threading.Thread(target=process_data, args=(target_ip, port)).start()
+
+            return {"status": "Start working"}, 200
+
+
+
 
     return app
