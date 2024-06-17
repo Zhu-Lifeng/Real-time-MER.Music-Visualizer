@@ -129,7 +129,7 @@ def Processor_Creation():
         global long_term_store
         data = request.get_json()
         long_term_store += data
-
+        print(len(long_term_store))
         return {"status": "Data received"}, 200
 
 
