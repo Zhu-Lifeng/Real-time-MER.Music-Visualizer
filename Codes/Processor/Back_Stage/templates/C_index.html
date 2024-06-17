@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dynamic Circles from Python SSE</title>
+    <script> //embed JavaScript codes
+        document.addEventListener("DOMContentLoaded", function() {//事件监听器（文档内容加载完全后执行函数）
+            var svg = document.getElementById("svgContainer");//SVG矢量图元素，储存在变量"svg"中
+            var eventSource = new EventSource("/stream");//创建“eventScource“对象，建立SSE链接（指定URL)
+
+            eventSource.onmessage = function(event) {//当收到服务器消息（“event”）时
+                var data = JSON.parse(event.data);//解析收到的信息并储存在“data”中
+
+                // 更新或添加圆
+                data.forEach(function(circle) {
+                    var existingCircle = document.getElementById("circle-" + circle.id);
+                    if (existingCircle) {
+                        existingCircle.setAttribute("cx", circle.x);
+                        existingCircle.setAttribute("cy", circle.y);
+                        existingCircle.setAttribute("r", circle.size);
+                        existingCircle.setAttribute("fill", circle.color);
+                    } else {
+                        var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                        newCircle.setAttribute("id", "circle-" + circle.id);
+                        newCircle.setAttribute("cx", circle.x);
+                        newCircle.setAttribute("cy", circle.y);
+                        newCircle.setAttribute("r", circle.size);
+                        newCircle.setAttribute("fill", circle.color);
+                        svg.appendChild(newCircle);
+                    }
+                });
+
+                // 移除过期的圆
+                var circles = svg.querySelectorAll("circle");
+                circles.forEach(function(circle) {
+                    var id = circle.getAttribute("id").split("-")[1];
+                    var existsInData = data.some(function(d) {
+                        return d.id == id;
+                    });
+                    if (!existsInData) {
+                        svg.removeChild(circle);
+                    }
+                });
+            };
+
+            eventSource.onerror = function() {
+                console.error("EventSource failed.");
+            };
+        });
+    </script>
+</head>
+<body>
+    <svg id="svgContainer" width="500" height="500" style="border:1px solid #000000;"></svg>
+</body>
+</html>
