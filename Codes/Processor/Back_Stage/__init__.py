@@ -8,11 +8,12 @@ import json
 import time
 import math
 def Processor_Creation():
-    global long_term_store
+    global long_term_store, trigger, outputting
 
     app = Flask(__name__)
     long_term_store = []
-
+    trigger = 0
+    outputting = []
     processing_event = threading.Event()  # 创建一个事件对象
 
 
@@ -23,30 +24,32 @@ def Processor_Creation():
     @app.route('/stream')
     def stream():
         def event_stream():
-            old_length = len(long_term_store)
+            global long_term_store, outputting, trigger
+            old_signature = trigger
+            print(trigger,len(outputting))
             while True:
-                if len(long_term_store) > old_length:
-                    new_data = len(long_term_store)
-                    old_length = len(long_term_store)
+                if trigger > old_signature:
+                    new_data = outputting
+                    old_signature = trigger
                     yield f"data: {json.dumps(new_data)}\n\n"
                 #time.sleep(1)
 
         return Response(event_stream(), mimetype='text/event-stream')
 
-    def process_data(target_ip, port):
-        global long_term_store
+    def process_data():
+        global long_term_store, outputting, trigger
         pitch_record = np.zeros(128)
         time_record = 0.01
         middle = [250, 250]
         id = 0
         a=0
-
+        trigger=0
         angle = np.linspace(0,2*math.pi,360)
         radius = np.linspace(0, 250,128)
-        url = f'http://{target_ip}:{port}/audio_Msg_received'
+        #url = f'http://{target_ip}:{port}/audio_Msg_received'
         while True:
             print(len(long_term_store))
-            if len(long_term_store) >= 4410:
+            if len(long_term_store) >= 441000:
                 print("1")
                 responses = []
                 note_pattern = []
@@ -55,8 +58,8 @@ def Processor_Creation():
                 pitch_mag = np.zeros(128)
                 pitch_tol = np.zeros(128)
                 pitch_id = np.zeros(128)
-                short_term_store = long_term_store[0:4410]
-                long_term_store = long_term_store[4410:]
+                short_term_store = long_term_store[0:441000]
+                long_term_store = long_term_store[441000:]
                 print("2")
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=512, threshold=0.1)
                 print("3")
@@ -112,17 +115,18 @@ def Processor_Creation():
 
                     time_record += pitch_times[-1]
                 if note_pic != []:
-                    data = note_pic
-                    response = requests.post(url, json=data)
-                    print("Sent")
-                    responses.append(response.status_code)
+                    outputting = note_pic
+                    trigger += 1
+                    #response = requests.post(url, json=data)
+                    #print("Sent")
+                    #responses.append(response.status_code)
             else:
                 time.sleep(0.25)  # 等待更多数据到达
 
 
     @app.route('/audio_fragment_receive', methods=['POST'])
     def receive_data():
-        global pitch_record, long_term_store,time_record
+        global long_term_store
         data = request.get_json()
         long_term_store += data
 
@@ -136,11 +140,11 @@ def Processor_Creation():
                 processing_event.set()  # 标记处理事件为已设置
                 #target_ip = request.form.get('target_ip')
                 #port = request.form.get('port')
-                target_ip = '127.0.0.1'
-                port='8002'
-                threading.Thread(target=process_data, args=(target_ip, port)).start()
+                #target_ip = '127.0.0.1'
+                #port='8002'
+                threading.Thread(target=process_data).start()
 
-            return {"status": "Start working"}, 200
+            return render_template('C_index.html')
 
 
 
