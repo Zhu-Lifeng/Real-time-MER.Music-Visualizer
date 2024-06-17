@@ -1,6 +1,3 @@
 flask
 librosa
-threading
-requests
 mido
-os
