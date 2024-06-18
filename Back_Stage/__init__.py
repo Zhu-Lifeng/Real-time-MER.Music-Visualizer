@@ -1,5 +1,6 @@
 import queue
 from flask import Flask, render_template, request, Response, jsonify
+from flask_cors import CORS
 import numpy as np
 import threading
 import librosa
@@ -11,6 +12,7 @@ import math
 
 def Processor_Creation():
     app = Flask(__name__)
+    CORS(app)
     long_term_store = []
     clients = []
     outputting = []
