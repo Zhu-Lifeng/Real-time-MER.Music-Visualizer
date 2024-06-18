@@ -95,11 +95,11 @@ def Processor_Creation():
                             pitch_active[midi_note] = 1
                             pitch_mag[midi_note] += magnitudes[i, j]
 
-                    if j // 441 == 0:
+                    if j // (5*441) == 0:
                         # 更新所有音符圆的信息
                         for p in range(128):
                             if pitch_active[p] == 0 and pitch_record[p] != 0:  # 需要消除的圆（已结束的音）
-                                if current_time - pitch_record[p] > 0.05:
+                                if current_time - pitch_record[p] > 0.2:
                                     note_pic = [item for item in note_pic if item["id"] != pitch_id[p]]
                                 pitch_record[p] = 0
 
@@ -118,7 +118,7 @@ def Processor_Creation():
                                 x = middle[0] + radius_N * math.cos(angle_N)
                                 y = middle[1] + radius_N * math.sin(angle_N)
                                 color = (
-                                    f"rgb({int(min(pitch_mag[p] / 500, 1) * 255)},{int(min(pitch_mag[p] / 500, 1) * 255)}, {int(min(pitch_mag[p] / 350, 1) * 255)})")
+                                    f"rgb({int((1-min(pitch_mag[p] / 500, 1)) * 255)},{int((1-min(pitch_mag[p] / 500, 1)) * 255)},{int((1-min(pitch_mag[p] / 500, 1)) * 255)})")
                                 size = 10  # 初始圆的尺寸
                                 note_pic.append({
                                     "id": ID,
@@ -131,7 +131,7 @@ def Processor_Creation():
                                 pitch_id[p] = ID
                                 pitch_record[p] = current_time
                                 ID += 1
-
+                        print("pic:",note_pic)
                         if note_pic:
                             json_data = json.dumps(note_pic)
                             send_to_clients(f"data: {json_data}\n\n")
@@ -154,4 +154,8 @@ def Processor_Creation():
 
             return render_template('C_index.html')
 
+    @app.route('/stop')
+    def stop():
+        long_term_store.clear()
+        return render_template('P_index.html')
     return app
