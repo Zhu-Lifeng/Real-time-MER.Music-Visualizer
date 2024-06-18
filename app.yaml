@@ -6,4 +6,3 @@ entrypoint: gunicorn -k gevent -w 4 main_Processor:app
 handlers:
 - url: /.*
   script: auto
-  scale: auto
