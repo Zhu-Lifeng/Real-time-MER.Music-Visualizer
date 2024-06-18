@@ -2,13 +2,14 @@
 <html>
 <head>
     <title>Dynamic Circles from Python SSE</title>
-    <script> //embed JavaScript codes
-        document.addEventListener("DOMContentLoaded", function() {//事件监听器（文档内容加载完全后执行函数）
-            var svg = document.getElementById("svgContainer");//SVG矢量图元素，储存在变量"svg"中
-            var eventSource = new EventSource("/stream");//创建“eventScource“对象，建立SSE链接（指定URL)
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var svg = document.getElementById("svgContainer");
+            // 更改了连接的 URL 地址
+            var eventSource = new EventSource("/register_client");
 
-            eventSource.onmessage = function(event) {//当收到服务器消息（“event”）时
-                var data = JSON.parse(event.data);//解析收到的信息并储存在“data”中
+            eventSource.onmessage = function(event) {
+                var data = JSON.parse(event.data);
 
                 // 更新或添加圆
                 data.forEach(function(circle) {
