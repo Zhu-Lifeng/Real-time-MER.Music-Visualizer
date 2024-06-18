@@ -1,4 +1,4 @@
-runtime: python39
+runtime: python311
 
 entrypoint: gunicorn -k gevent -w 4 main_Processor:app
 
