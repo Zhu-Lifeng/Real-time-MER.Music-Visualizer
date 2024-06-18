@@ -1,6 +1,5 @@
 import queue
 from flask import Flask, render_template, request, Response, jsonify
-from flask_cors import CORS
 import numpy as np
 import threading
 import librosa
@@ -12,11 +11,11 @@ import math
 
 def Processor_Creation():
     app = Flask(__name__)
-    CORS(app)
     long_term_store = []
     clients = []
     outputting = []
     processing_event = threading.Event()  # 创建一个事件对象
+    stop_event = threading.Event()
     lock = threading.Lock()
 
     @app.route('/')
@@ -79,6 +78,9 @@ def Processor_Creation():
         angle = np.linspace(0, 2 * math.pi, 360)
         radius = np.linspace(0, 250, 128)
         while True:
+            if stop_event.is_set():
+                stop_event.clear()
+                break
             with lock:
                 l = len(long_term_store)
                 print("working", l)
@@ -171,5 +173,6 @@ def Processor_Creation():
     @app.route('/stop',methods =['POST'])
     def stop():
         long_term_store.clear()
+        stop_event.set()
         return render_template('P_index.html')
     return app
