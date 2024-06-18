@@ -80,6 +80,7 @@ def Processor_Creation():
         while True:
             if stop_event.is_set():
                 stop_event.clear()
+                processing_event.clear()
                 return {"status": "Stopped"}, 200
             with lock:
                 l = len(long_term_store)
