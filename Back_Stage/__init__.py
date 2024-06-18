@@ -154,7 +154,7 @@ def Processor_Creation():
 
             return render_template('C_index.html')
 
-    @app.route('/stop')
+    @app.route('/stop',methods =['POST'])
     def stop():
         long_term_store.clear()
         return render_template('P_index.html')
