@@ -3,13 +3,7 @@ runtime: python311
 instance_class: F4_HIGHMEM
 entrypoint: gunicorn -k gevent -w 4 main_Processor:app
 
-automatic_scaling:
-  target_cpu_utilization: 0.5
-  min_instances: 1
-  max_instances: 20
-
 handlers:
 - url: /.*
   script: auto
-  secure: always
-
+  scale: auto
