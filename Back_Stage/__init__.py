@@ -44,11 +44,16 @@ def Processor_Creation():
         def gen():
             q = queue.Queue()
             clients.append(q)
+            P_time = 0
             try:
                 while True:
                     try:
                         data = q.get(timeout=10)  # 设置超时以避免长时间阻塞
+                        D_time = time.time() - P_time
+                        if D_time < 0.1:
+                            time.sleep(0.1-D_time)
                         yield data
+                        P_time = time.time()
                     except queue.Empty:
                         # 如果超时没有数据，发送一个保持连接的心跳信号
                         # 注意: 心跳信号的内容需要符合客户端处理逻辑
@@ -61,11 +66,13 @@ def Processor_Creation():
 
     def process_data():
         pitch_record = np.zeros(128)
-        time_record = 0.01
+        pitch_mag = np.zeros(128)
+        pitch_id = np.zeros(128)
+        time_record = 0.00001
         middle = [250, 250]
-        ID = 0
+        ID = 1
         a = 0
-
+        pitch_active = np.zeros(128)
         note_pic = []
         angle = np.linspace(0, 2 * math.pi, 360)
         radius = np.linspace(0, 250, 128)
@@ -74,39 +81,38 @@ def Processor_Creation():
                 l = len(long_term_store)
                 print("working", l)
             if l >= 441000:
-                pitch_mag = np.zeros(128)
-                pitch_id = np.zeros(128)
                 with lock:
                     short_term_store = long_term_store[:441000]
                     del long_term_store[:441000]
                     print("cut", len(long_term_store))
 
-                pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=512,
+                pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=1024,
                                                        threshold=0.1)
 
-                pitch_times = librosa.times_like(pitches, sr=44100, hop_length=512)
-
+                pitch_times = librosa.times_like(pitches, sr=44100, hop_length=1024)
                 for j in range(pitches.shape[1]):
+                    start_time = time.time()
                     current_time = pitch_times[j] + time_record
-                    pitch_active = np.zeros(128)
+
                     for i in range(pitches.shape[0]):
                         if magnitudes[i, j] > 0:
                             midi_note = int(librosa.hz_to_midi(pitches[i, j]))
                             pitch_active[midi_note] = 1
                             pitch_mag[midi_note] += magnitudes[i, j]
 
-                    if j // (5*441) == 0:
+                    if j//4410 == 0:
                         # 更新所有音符圆的信息
                         for p in range(128):
                             if pitch_active[p] == 0 and pitch_record[p] != 0:  # 需要消除的圆（已结束的音）
-                                if current_time - pitch_record[p] > 0.2:
-                                    note_pic = [item for item in note_pic if item["id"] != pitch_id[p]]
+                                note_pic = [item for item in note_pic if item["id"] != pitch_id[p]]
+                                pitch_id[p] = 0
                                 pitch_record[p] = 0
 
                         for element in note_pic:
-                            element["size"] += 1
+                            element["size"] += 0.1
+
                         for p in range(128):
-                            if pitch_active[p] != 0 and pitch_record[p] == 0:  # 新产生的圆（新出现的音）
+                            if pitch_active[p] != 0 and pitch_record[p] == 0 and current_time-pitch_record[p] > 0.05:  # 新产生的圆（新出现的音）
                                 if a < 360:
                                     angle_N = angle[a]
                                     a += 1
@@ -118,27 +124,33 @@ def Processor_Creation():
                                 x = middle[0] + radius_N * math.cos(angle_N)
                                 y = middle[1] + radius_N * math.sin(angle_N)
                                 color = (
-                                    f"rgb({int((1-min(pitch_mag[p] / 500, 1)) * 255)},{int((1-min(pitch_mag[p] / 500, 1)) * 255)},{int((1-min(pitch_mag[p] / 500, 1)) * 255)})")
-                                size = 10  # 初始圆的尺寸
+                                        f"rgb({int((1-min(pitch_mag[p] / 200, 1)) * 255*0.5)},"
+                                        f"{int((min(pitch_mag[p] / 200, 1)) * 255*0.75)},"
+                                        f"{int((1-min(pitch_mag[p] / 200, 1)) * 255)*0.6})")
+                                size = 5  # 初始圆的尺寸
                                 note_pic.append({
-                                    "id": ID,
-                                    "pitch": p,
-                                    "x": x,
-                                    "y": y,
-                                    "size": size,
-                                    "color": color,
-                                })
+                                        "id": ID,
+                                        "pitch": p,
+                                        "x": x,
+                                        "y": y,
+                                        "size": size,
+                                        "color": color,
+                                    })
                                 pitch_id[p] = ID
                                 pitch_record[p] = current_time
                                 ID += 1
-                        print("pic:",note_pic)
-                        if note_pic:
-                            json_data = json.dumps(note_pic)
-                            send_to_clients(f"data: {json_data}\n\n")
+                        print("pic:",len(note_pic))
+                        json_data = json.dumps(note_pic)
+                        send_to_clients(f"data: {json_data}\n\n")
+                        pitch_active = np.zeros(128)
+                        pitch_mag = np.zeros(128)
+                    d_time = time.time()-start_time
+                    if d_time < 0.01:
+                        time.sleep(0.01-d_time)
                 time_record += pitch_times[-1]
             else:
                 print("alive", l)
-                time.sleep(1)  # 等待更多数据到达
+                time.sleep(0.5)  # 等待更多数据到达
 
     @app.route('/audio_Msg_send', methods=['GET', 'POST'])
     def send_Msg():
