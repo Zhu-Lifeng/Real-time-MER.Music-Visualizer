@@ -1,6 +1,7 @@
 runtime: python39
 
-entrypoint: gunicorn -b :$PORT main_Processor:app
+entrypoint: gunicorn -k gevent -w 4 main_Processor:app
+
 
 handlers: # 定义URL处理程序
 - url: /.*
