@@ -1,5 +1,6 @@
 runtime: python311
 
+instance_class: F4_HIGHMEM
 entrypoint: gunicorn -k gevent -w 4 main_Processor:app
 
 
