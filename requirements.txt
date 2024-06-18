@@ -1,5 +1,7 @@
 Flask
 gunicorn
-
+gevent
+numpy
+soxr
 librosa
 mido
