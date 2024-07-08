@@ -1,61 +1,94 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <style>
+    progress {
+        width: 300px; /* 设置进度条宽度 */
+        height: 20px; /* 设置进度条高度 */
+        margin-top: 10px;
+    }
+</style>
     <title>Dynamic Circles from Python SSE</title>
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            var svg = document.getElementById("svgContainer");
-            // 更改了连接的 URL 地址
-            var eventSource = new EventSource("/register_client");
+document.addEventListener("DOMContentLoaded", function() {
+    var svg = document.getElementById("svgContainer");
+    var emotionDisplay = document.getElementById("emotionDisplay");
+    var arousalProgress = document.getElementById("arousalProgress");
+    var valenceProgress = document.getElementById("valenceProgress");
+    var arousalValue = document.getElementById("arousalValue");
+    var valenceValue = document.getElementById("valenceValue");
+    var eventSource = new EventSource("/register_client");
 
-            eventSource.onmessage = function(event) {
-                var data = JSON.parse(event.data);
+    eventSource.onmessage = function(event) {
+        var data = JSON.parse(event.data);
 
-                // 更新或添加圆
-                data.forEach(function(circle) {
-                    var existingCircle = document.getElementById("circle-" + circle.id);
-                    if (existingCircle) {
-                        existingCircle.setAttribute("cx", circle.x);
-                        existingCircle.setAttribute("cy", circle.y);
-                        existingCircle.setAttribute("r", circle.size);
-                        existingCircle.setAttribute("fill", circle.color);
-                    } else {
-                        var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                        newCircle.setAttribute("id", "circle-" + circle.id);
-                        newCircle.setAttribute("cx", circle.x);
-                        newCircle.setAttribute("cy", circle.y);
-                        newCircle.setAttribute("r", circle.size);
-                        newCircle.setAttribute("fill", circle.color);
-                        svg.appendChild(newCircle);
-                    }
-                });
-
-                // 移除过期的圆
-                var circles = svg.querySelectorAll("circle");
-                circles.forEach(function(circle) {
-                    var id = circle.getAttribute("id").split("-")[1];
-                    var existsInData = data.some(function(d) {
-                        return d.id == id;
-                    });
-                    if (!existsInData) {
-                        svg.removeChild(circle);
-                    }
-                });
-            };
-
-            eventSource.onerror = function() {
-                console.error("EventSource failed.");
-            };
+        // 更新或添加圆
+        data.forEach(function(circle) {
+            var existingCircle = document.getElementById("circle-" + circle.id);
+            if (existingCircle) {
+                existingCircle.setAttribute("cx", circle.x);
+                existingCircle.setAttribute("cy", circle.y);
+                existingCircle.setAttribute("r", circle.size);
+                existingCircle.setAttribute("fill", circle.color);
+            } else {
+                var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                newCircle.setAttribute("id", "circle-" + circle.id);
+                newCircle.setAttribute("cx", circle.x);
+                newCircle.setAttribute("cy", circle.y);
+                newCircle.setAttribute("r", circle.size);
+                newCircle.setAttribute("fill", circle.color);
+                newCircle.setAttribute("opacity", circle.opacity);
+                svg.appendChild(newCircle);
+            }
         });
+
+        // 移除过期的圆
+        var circles = svg.querySelectorAll("circle");
+        circles.forEach(function(circle) {
+            var id = circle.getAttribute("id").split("-")[1];
+            if (!data.some(d => d.id == id)) {
+                svg.removeChild(circle);
+            }
+        });
+
+        // 更新情绪、Arousal 和 Valence 显示
+        if (data.length) {
+            var latestData = data[data.length - 1];
+            emotionDisplay.textContent = "Current Emotion: " + latestData.emotion;
+            var arousalPercent = ((latestData.arousal + 1) / 2) * 100; // -1~1 to 0~100
+            var valencePercent = ((latestData.valence + 1) / 2) * 100; // -1~1 to 0~100
+            arousalProgress.value = arousalPercent;
+            valenceProgress.value = valencePercent;
+            arousalValue.textContent = latestData.arousal.toFixed(2);
+            valenceValue.textContent = latestData.valence.toFixed(2);
+        } else {
+            emotionDisplay.textContent = "No emotion data";
+        }
+    };
+
+    eventSource.onerror = function() {
+        console.error("EventSource failed.");
+    };
+});
+
     </script>
 </head>
 <body>
     <svg id="svgContainer" width="500" height="500" style="border:1px solid #000000;"></svg>
-</body>
+    <div id="emotionDisplay" style="font-size: 24px; color: #333; margin: 20px;">
+        Waiting for emotion data...
+    </div>
+     <!-- Arousal 进度条 -->
+    <label for="arousalProgress">Arousal:</label>
+    <progress id="arousalProgress" value="50" max="100" style="width: 300px; height: 20px;"></progress>
+    <span id="arousalValue">0</span>
 
+    <!-- Valence 进度条 -->
+    <label for="valenceProgress">Valence:</label>
+    <progress id="valenceProgress" value="50" max="100" style="width: 300px; height: 20px;"></progress>
+    <span id="valenceValue">0</span>
     <form action="/stop" method="post">
-
-            <button type="submit">Clear & Back</button>
-        </form>
-
+        <button type="submit">Clear & Back</button>
+    </form>
+</body>
 </html>
