@@ -1,8 +1,2 @@
 Flask
-Flask-CORS==3.0.10
-gunicorn
-gevent
-numpy==1.24.4
-soxr
 librosa
-mido
