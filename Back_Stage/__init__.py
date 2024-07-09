@@ -268,18 +268,8 @@ def Processor_Creation():
             return 'No selected file'
         if file:
             filename = file.filename
-            #file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            #file.save(file_path)
-            
-            # Upload to Google Cloud Storage
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(app.config['UPLOAD_FOLDER'])
-            blob = bucket.blob(filename)
-            blob.upload_from_filename(file_path)
-            
-            blob = bucket.blob(filename)
-            audio_data = blob.download_as_bytes()
-            audio, sr = librosa.load(BytesIO(audio_data), sr=44100)
+            file_content = file.read()
+            audio, sr = librosa.load(io.BytesIO(file_content), sr=44100)
             # print(audio.shape)
             flash('File successfully uploaded')
 
