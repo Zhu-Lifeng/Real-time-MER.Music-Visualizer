@@ -1,5 +1,5 @@
 import queue
-from flask import Flask, render_template, request, Response, jsonify
+from flask import Flask, render_template, request, Response, jsonify,flash
 import numpy as np
 import threading
 import librosa
@@ -7,18 +7,25 @@ import json
 import time
 import math
 import torch
-
+import os
 from .MER_model import RCNN,DynamicPCALayer
 
 def Processor_Creation():
     app = Flask(__name__)
+    #upload
+    app.secret_key = '19980706'
+    app.config['UPLOAD_FOLDER'] = 'uploads'
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
+
     long_term_store = []
     clients = []
     outputting = []
     processing_event = threading.Event()  # 创建一个事件对象
+    simulator = threading.Event()
     stop_event = threading.Event()
     lock = threading.Lock()
-    model=RCNN()
+    model = RCNN()
     model_path = 'Back_Stage/best_model.pth'
     pca_paths = ['Back_Stage/pca1.pkl', 'Back_Stage/pca2.pkl', 'Back_Stage/pca3.pkl']
     model.load_model(model_path, pca_paths)
@@ -26,15 +33,15 @@ def Processor_Creation():
 
     @app.route('/')
     def index():
-        return render_template('P_index.html')
+        return render_template('C_index.html')
 
-    @app.route('/audio_fragment_receive', methods=['POST'])
-    def receive_data():
-        data = request.get_json()
-        with lock:
-            long_term_store.extend(data)
-            print("received", len(long_term_store))
-        return {"status": "Data received"}, 200
+    #@app.route('/audio_fragment_receive', methods=['POST'])
+    #def receive_data():
+    #    data = request.get_json()
+    #    with lock:
+    #        long_term_store.extend(data)
+    #        print("received", len(long_term_store))
+    #    return {"status": "Data received"}, 200
 
     def send_to_clients(data):
         dead_clients = []
@@ -215,20 +222,35 @@ def Processor_Creation():
                             time.sleep(0.1-d_time)
                 time_record += pitch_times[-1]
             else:
-                #print("alive", l)
                 time.sleep(0.5)  # 等待更多数据到达
 
-    @app.route('/audio_Msg_send', methods=['GET', 'POST'])
+
+    def Simulator():
+        ssr = 44100
+
+        for t in range(len(audio) // ssr):  # 检查 notes_midi 是否为空
+            if stop_event.is_set():
+                stop_event.clear()
+                simulator.clear()
+                return {"status": "Stopped"}, 200
+            start_time = time.time()
+            data = audio[t * ssr:t * ssr + ssr].tolist()
+            with lock:
+                long_term_store.extend(data)
+            D_time = time.time() - start_time
+            if D_time < 1:
+                time.sleep(1 - D_time)
+
+    @app.route('/start', methods=['GET', 'POST'])
     def send_Msg():
         if request.method == 'POST':
             if not processing_event.is_set():
                 processing_event.set()  # 标记处理事件为已设置
-                # target_ip = request.form.get('target_ip')
-                # port = request.form.get('port')
-                # target_ip = '127.0.0.1'
-                # port='8002'
                 threading.Thread(target=process_data).start()
-                print("Started")
+            if not simulator.is_set():
+                simulator.set()
+                threading.Thread(target=Simulator).start()
+            print("Started")
 
             return render_template('C_index.html')
 
@@ -236,7 +258,25 @@ def Processor_Creation():
     def stop():
         long_term_store.clear()
         stop_event.set()
-        return render_template('P_index.html')
+        return render_template('C_index.html')
+
+    @app.route('/upload', methods=['POST'])
+    def upload_file():
+        global audio, sr, file_path
+        if 'file' not in request.files:
+            return 'No file part'
+        file = request.files['file']
+        if file.filename == '':
+            return 'No selected file'
+        if file:
+            filename =file.filename
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            audio, sr = librosa.load(file_path, sr=44100)
+            #print(audio.shape)
+            flash('File successfully uploaded')
+
+            return render_template('C_index.html')
 
 
     return app
