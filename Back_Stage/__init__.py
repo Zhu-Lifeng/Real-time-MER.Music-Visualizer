@@ -1,5 +1,5 @@
 import queue
-from flask import Flask, render_template, request, Response, jsonify,flash
+from flask import Flask, render_template, request, Response, jsonify, flash
 import numpy as np
 import threading
 import librosa
@@ -8,13 +8,16 @@ import time
 import math
 import torch
 import os
-from .MER_model import RCNN,DynamicPCALayer
+from google.cloud import storage
+from .MER_model import RCNN, DynamicPCALayer
 
 def Processor_Creation():
     app = Flask(__name__)
-    #upload
+    # Upload
     app.secret_key = '19980706'
     app.config['UPLOAD_FOLDER'] = 'uploads'
+    app.config['GCS_BUCKET'] = 'your-bucket-name'
+    
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -34,14 +37,6 @@ def Processor_Creation():
     @app.route('/')
     def index():
         return render_template('C_index.html')
-
-    #@app.route('/audio_fragment_receive', methods=['POST'])
-    #def receive_data():
-    #    data = request.get_json()
-    #    with lock:
-    #        long_term_store.extend(data)
-    #        print("received", len(long_term_store))
-    #    return {"status": "Data received"}, 200
 
     def send_to_clients(data):
         dead_clients = []
@@ -70,7 +65,6 @@ def Processor_Creation():
                         P_time = time.time()
                     except queue.Empty:
                         # 如果超时没有数据，发送一个保持连接的心跳信号
-                        # 注意: 心跳信号的内容需要符合客户端处理逻辑
                         yield 'data: {}\n\n'  # 发送空数据包来保持连接
             except GeneratorExit:
                 # 当客户端断开连接时，清理操作
@@ -127,7 +121,7 @@ def Processor_Creation():
                 for j in range(pitches.shape[1]):
                     start_time = time.time()
                     current_time = pitch_times[j] + time_record
-                    
+
 
                     for i in range(pitches.shape[0]):
                         if stop_event.is_set():
@@ -139,7 +133,7 @@ def Processor_Creation():
                             pitch_active[midi_note] = 1
                             if pitch_mag[midi_note] < magnitudes[i, j]:
                                 pitch_mag[midi_note] = magnitudes[i, j]
-                            
+
 
                     if j%(pitches.shape[1]//100) == 0: #per 0.1s
 
@@ -230,7 +224,6 @@ def Processor_Creation():
             else:
                 time.sleep(0.5)  # 等待更多数据到达
 
-
     def Simulator():
         ssr = 44100
 
@@ -260,7 +253,7 @@ def Processor_Creation():
 
             return render_template('C_index.html')
 
-    @app.route('/stop',methods =['POST'])
+    @app.route('/stop', methods=['POST'])
     def stop():
         long_term_store.clear()
         stop_event.set()
@@ -275,14 +268,20 @@ def Processor_Creation():
         if file.filename == '':
             return 'No selected file'
         if file:
-            filename =file.filename
+            filename = file.filename
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
+            
+            # Upload to Google Cloud Storage
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(app.config['GCS_BUCKET'])
+            blob = bucket.blob(filename)
+            blob.upload_from_filename(file_path)
+            
             audio, sr = librosa.load(file_path, sr=44100)
-            #print(audio.shape)
+            # print(audio.shape)
             flash('File successfully uploaded')
 
             return render_template('C_index.html')
-
 
     return app
