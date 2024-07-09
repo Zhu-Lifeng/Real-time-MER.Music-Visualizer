@@ -16,7 +16,6 @@ def Processor_Creation():
     # Upload
     app.secret_key = '19980706'
     app.config['UPLOAD_FOLDER'] = 'uploads'
-    app.config['GCS_BUCKET'] = 'your-bucket-name'
     
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -269,12 +268,12 @@ def Processor_Creation():
             return 'No selected file'
         if file:
             filename = file.filename
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
+            #file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            #file.save(file_path)
             
             # Upload to Google Cloud Storage
             storage_client = storage.Client()
-            bucket = storage_client.bucket(app.config['GCS_BUCKET'])
+            bucket = storage_client.bucket(app.config['UPLOAD_FOLDER'])
             blob = bucket.blob(filename)
             blob.upload_from_filename(file_path)
             
