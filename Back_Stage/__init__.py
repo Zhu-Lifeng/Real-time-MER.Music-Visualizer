@@ -277,7 +277,9 @@ def Processor_Creation():
             blob = bucket.blob(filename)
             blob.upload_from_filename(file_path)
             
-            audio, sr = librosa.load(file_path, sr=44100)
+            blob = bucket.blob(filename)
+            audio_data = blob.download_as_bytes()
+            audio, sr = librosa.load(BytesIO(audio_data), sr=44100)
             # print(audio.shape)
             flash('File successfully uploaded')
 
