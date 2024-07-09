@@ -127,13 +127,19 @@ def Processor_Creation():
                 for j in range(pitches.shape[1]):
                     start_time = time.time()
                     current_time = pitch_times[j] + time_record
+                    
 
                     for i in range(pitches.shape[0]):
+                        if stop_event.is_set():
+                            stop_event.clear()
+                            processing_event.clear()
+                            return {"status": "Stopped"}, 200
                         if magnitudes[i, j] > 0:
                             midi_note = int(librosa.hz_to_midi(pitches[i, j]))
                             pitch_active[midi_note] = 1
                             if pitch_mag[midi_note] < magnitudes[i, j]:
                                 pitch_mag[midi_note] = magnitudes[i, j]
+                            
 
                     if j%(pitches.shape[1]//100) == 0: #per 0.1s
 
