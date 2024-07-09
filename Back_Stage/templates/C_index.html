@@ -90,5 +90,22 @@ document.addEventListener("DOMContentLoaded", function() {
     <form action="/stop" method="post">
         <button type="submit">Clear & Back</button>
     </form>
+    <form action="/start" method="post">
+            <button type="submit">let's start</button>
+        </form>
+    <h1>Testing Tool (Sensor Simulator)</h1>
+    <h1>Upload a File</h1>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <input type="submit" value="Upload">
+    </form>
+{% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="flash-message">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
 </body>
 </html>
