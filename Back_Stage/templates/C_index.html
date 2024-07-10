@@ -1,76 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <style>
-    progress {
-        width: 300px; /* 设置进度条宽度 */
-        height: 20px; /* 设置进度条高度 */
-        margin-top: 10px;
-    }
-</style>
+        progress {
+            width: 300px; /* 设置进度条宽度 */
+            height: 20px; /* 设置进度条高度 */
+            margin-top: 10px;
+        }
+
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+    </style>
     <title>Dynamic Circles from Python SSE</title>
     <script>
-document.addEventListener("DOMContentLoaded", function() {
-    var svg = document.getElementById("svgContainer");
-    var emotionDisplay = document.getElementById("emotionDisplay");
-    var arousalProgress = document.getElementById("arousalProgress");
-    var valenceProgress = document.getElementById("valenceProgress");
-    var arousalValue = document.getElementById("arousalValue");
-    var valenceValue = document.getElementById("valenceValue");
-    var eventSource = new EventSource("/register_client");
+        document.addEventListener("DOMContentLoaded", function() {
+            var svg = document.getElementById("svgContainer");
+            var emotionDisplay = document.getElementById("emotionDisplay");
+            var arousalProgress = document.getElementById("arousalProgress");
+            var valenceProgress = document.getElementById("valenceProgress");
+            var arousalValue = document.getElementById("arousalValue");
+            var valenceValue = document.getElementById("valenceValue");
+            var eventSource = new EventSource("/register_client");
 
-    eventSource.onmessage = function(event) {
-        var data = JSON.parse(event.data);
+            eventSource.onmessage = function(event) {
+                var data = JSON.parse(event.data);
 
-        // 更新或添加圆
-        data.forEach(function(circle) {
-            var existingCircle = document.getElementById("circle-" + circle.id);
-            if (existingCircle) {
-                existingCircle.setAttribute("cx", circle.x);
-                existingCircle.setAttribute("cy", circle.y);
-                existingCircle.setAttribute("r", circle.size);
-                existingCircle.setAttribute("fill", circle.color);
-            } else {
-                var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                newCircle.setAttribute("id", "circle-" + circle.id);
-                newCircle.setAttribute("cx", circle.x);
-                newCircle.setAttribute("cy", circle.y);
-                newCircle.setAttribute("r", circle.size);
-                newCircle.setAttribute("fill", circle.color);
-                newCircle.setAttribute("opacity", circle.opacity);
-                svg.appendChild(newCircle);
+                // 更新或添加圆
+                data.forEach(function(circle) {
+                    var existingCircle = document.getElementById("circle-" + circle.id);
+                    if (existingCircle) {
+                        existingCircle.setAttribute("cx", circle.x);
+                        existingCircle.setAttribute("cy", circle.y);
+                        existingCircle.setAttribute("r", circle.size);
+                        existingCircle.setAttribute("fill", circle.color);
+                    } else {
+                        var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                        newCircle.setAttribute("id", "circle-" + circle.id);
+                        newCircle.setAttribute("cx", circle.x);
+                        newCircle.setAttribute("cy", circle.y);
+                        newCircle.setAttribute("r", circle.size);
+                        newCircle.setAttribute("fill", circle.color);
+                        newCircle.setAttribute("opacity", circle.opacity);
+                        svg.appendChild(newCircle);
+                    }
+                });
+
+                // 移除过期的圆
+                var circles = svg.querySelectorAll("circle");
+                circles.forEach(function(circle) {
+                    var id = circle.getAttribute("id").split("-")[1];
+                    if (!data.some(d => d.id == id)) {
+                        svg.removeChild(circle);
+                    }
+                });
+
+                // 更新情绪、Arousal 和 Valence 显示
+                if (data.length) {
+                    var latestData = data[data.length - 1];
+                    emotionDisplay.textContent = "Current Emotion: " + latestData.emotion;
+                    var arousalPercent = ((latestData.arousal + 1) / 2) * 100; // -1~1 to 0~100
+                    var valencePercent = ((latestData.valence + 1) / 2) * 100; // -1~1 to 0~100
+                    arousalProgress.value = arousalPercent;
+                    valenceProgress.value = valencePercent;
+                    arousalValue.textContent = latestData.arousal.toFixed(2);
+                    valenceValue.textContent = latestData.valence.toFixed(2);
+                } else {
+                    emotionDisplay.textContent = "No emotion data";
+                }
+            };
+
+            eventSource.onerror = function() {
+                console.error("EventSource failed.");
+            };
+
+            // 读取本地存储中的状态
+            const storedMode = localStorage.getItem('selectedMode');
+            const content1 = document.getElementById('Read_file');
+            const content2 = document.getElementById('Microphone');
+            const buttonFile = document.getElementById('toggleFileButton');
+            const buttonMic = document.getElementById('toggleMicButton');
+
+            if (storedMode === 'Microphone') {
+                content1.classList.remove('active');
+                content2.classList.add('active');
+                buttonFile.disabled = false;
+                buttonMic.disabled = true;
+            } else if (storedMode === 'File') {
+                content1.classList.add('active');
+                content2.classList.remove('active');
+                buttonFile.disabled = true;
+                buttonMic.disabled = false;
             }
         });
-
-        // 移除过期的圆
-        var circles = svg.querySelectorAll("circle");
-        circles.forEach(function(circle) {
-            var id = circle.getAttribute("id").split("-")[1];
-            if (!data.some(d => d.id == id)) {
-                svg.removeChild(circle);
-            }
-        });
-
-        // 更新情绪、Arousal 和 Valence 显示
-        if (data.length) {
-            var latestData = data[data.length - 1];
-            emotionDisplay.textContent = "Current Emotion: " + latestData.emotion;
-            var arousalPercent = ((latestData.arousal + 1) / 2) * 100; // -1~1 to 0~100
-            var valencePercent = ((latestData.valence + 1) / 2) * 100; // -1~1 to 0~100
-            arousalProgress.value = arousalPercent;
-            valenceProgress.value = valencePercent;
-            arousalValue.textContent = latestData.arousal.toFixed(2);
-            valenceValue.textContent = latestData.valence.toFixed(2);
-        } else {
-            emotionDisplay.textContent = "No emotion data";
-        }
-    };
-
-    eventSource.onerror = function() {
-        console.error("EventSource failed.");
-    };
-});
-
     </script>
 </head>
 <body>
@@ -91,21 +116,60 @@ document.addEventListener("DOMContentLoaded", function() {
         <button type="submit">Clear & Back</button>
     </form>
     <form action="/start" method="post">
-            <button type="submit">let's start</button>
-        </form>
-    <h1>Testing Tool (Sensor Simulator)</h1>
-    <h1>Upload a File</h1>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file">
-        <input type="submit" value="Upload">
+        <button type="submit">Let's Start</button>
     </form>
-{% with messages = get_flashed_messages() %}
+
+    <h1>Choose the working mode</h1>
+
+    <button id="toggleFileButton">File Reading Mode</button>
+    <button id="toggleMicButton">Microphone Mode</button>
+
+    <div id="Read_file" class="content">
+        <h1>Upload a File</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <input lang="en" type="file" value="Select File" name="file" >
+            <input type="submit" value="Upload">
+        </form>
+        {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
                     <div class="flash-message">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
+    </div>
+    <div id="Microphone" class="content">
+        <h1>Microphone Access</h1>
+        <button id="startButton">Start Microphone</button>
+        <audio id="audio" controls></audio>
+    </div>
 
+    <script>
+        document.getElementById('toggleFileButton').addEventListener('click', function() {
+            const content1 = document.getElementById('Read_file');
+            const content2 = document.getElementById('Microphone');
+            const buttonFile = document.getElementById('toggleFileButton');
+            const buttonMic = document.getElementById('toggleMicButton');
+
+            content1.classList.add('active');
+            content2.classList.remove('active');
+            buttonFile.disabled = true;
+            buttonMic.disabled = false;
+            localStorage.setItem('selectedMode', 'File');
+        });
+
+        document.getElementById('toggleMicButton').addEventListener('click', function() {
+            const content1 = document.getElementById('Read_file');
+            const content2 = document.getElementById('Microphone');
+            const buttonFile = document.getElementById('toggleFileButton');
+            const buttonMic = document.getElementById('toggleMicButton');
+
+            content1.classList.remove('active');
+            content2.classList.add('active');
+            buttonFile.disabled = false;
+            buttonMic.disabled = true;
+            localStorage.setItem('selectedMode', 'Microphone');
+        });
+    </script>
 </body>
 </html>
