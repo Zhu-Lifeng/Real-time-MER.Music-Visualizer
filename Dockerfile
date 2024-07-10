@@ -8,4 +8,4 @@ RUN pip install -r requirements.txt
 
 EXPOSE 8080
 
-CMD ["python", "main_serverless.py"]
+CMD ["python", "main.py"]
