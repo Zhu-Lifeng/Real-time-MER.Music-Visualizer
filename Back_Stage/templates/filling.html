@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nutrient Intake Calculator</title>
+    <style>
+        body {
+            font-family: 'Arial';text-align: center;
+        }
+        .background-container {
+            position: relative;
+            height: 100vh;
+            background-image: url('{{ url_for('static', filename='background.jpg') }}');
+            background-size: 100% 100%;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+        .white-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.4);
+            z-index: 1;
+        }
+        form {
+            max-width: 400px;
+            margin: 20px auto;
+            background-color: rgb(255, 255, 255);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        p, h2 {
+            z-index: 2;
+            position: relative;
+            color: #ff7e67; 
+        }
+        input, select {
+            position: relative;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            box-sizing: border-box; 
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            z-index: 2;
+        }
+        button {
+            position: relative;
+            background-color: #ff7e67; 
+            color: #fff;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 2;
+        }
+        button:hover {
+            background-color: #ff5c49; 
+        }.flex-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.form-group {
+    display: flex;
+    width: 100%;
+    margin-bottom: 10px;
+     align-items: center;
+}
+
+.form-group label {
+    min-width: 150px;
+     align-items: center;
+}
+
+input[type="number"], select {
+    flex-grow: 1;
+     align-items: center;
+}
+
+
+
+
+    </style>
+</head>
+<body>
+    <div class="background-container">
+        <div class="white-overlay"></div>
+        <form action="/filling" method="post">
+    <h2>Please fill in your personal detail</h2>
+    <div class="flex-container">
+        <div class="form-group">
+            <label>Your age is</label>
+            <input type="number" id="user_age" name="user_age" placeholder="{{ user.user_age }}" value="{{ user.user_age }}">years old
+        </div>
+        <div class="form-group">
+            <label>Your gender is</label>
+            <select id="user_gender" name="user_gender">
+                <option value="male"{% if user.user_gender == "male" %}selected{% endif %}> Male</option>
+                <option value="female"{% if user.user_gender == "female" %}selected{% endif %}>Female</option>
+            </select>
+        </div>
+    </div>
+    <button type="submit">Submit</button>
+</form>
+    </div>
+</body>
+</html>
