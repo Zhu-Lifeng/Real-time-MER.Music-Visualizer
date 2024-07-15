@@ -113,9 +113,6 @@
     <progress id="valenceProgress" value="50" max="100" style="width: 300px; height: 20px;"></progress>
     <span id="valenceValue">0</span>
 
-    <form action="/start" method="post">
-        <button type="submit">Let's Start</button>
-    </form>
 
     <form action="/stop" method="post">
         <button type="submit">Clear & Back</button>
@@ -132,7 +129,7 @@
         <h1>Upload a File</h1>
         <form action="/upload" method="post" enctype="multipart/form-data">
             <input lang="en" type="file" value="Select File" name="file" >
-            <input type="submit" value="Upload">
+            <input type="submit" value="Start">
         </form>
         {% with messages = get_flashed_messages() %}
             {% if messages %}
