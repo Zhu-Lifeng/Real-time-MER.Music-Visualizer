@@ -182,6 +182,14 @@ def Processor_Creation():
         })
         return redirect(url_for('main'))
 
+    @app.route('/logout')
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for('index'))
+
+
+
     def send_to_clients(data):
         dead_clients = []
         for client in clients:
