@@ -210,7 +210,7 @@ def Processor_Creation():
             try:
                 while True:
                     try:
-                        data = q.get(timeout=100)  # 设置超时以避免长时间阻塞
+                        data = q.get(timeout=10)  # 设置超时以避免长时间阻塞
                         D_time = time.time() - P_time
                         if D_time < 0.1:
                             time.sleep(0.1-D_time)
@@ -271,7 +271,7 @@ def Processor_Creation():
             with lock:
                 l = len(long_term_store)
                 print("working", l)
-                print(f"Stop event status inside lock: {stop_event.is_set()}")
+                #print(f"Stop event status inside lock: {stop_event.is_set()}")
 
             if l >= 220500:
                 heart_beat = time.time()
@@ -279,7 +279,7 @@ def Processor_Creation():
                     short_term_store = long_term_store[:220500]
                     del long_term_store[:220500]
                     print("cut", len(long_term_store))
-                    print(f"Stop event status after cutting: {stop_event.is_set()}")
+                    #print(f"Stop event status after cutting: {stop_event.is_set()}")
 
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441,
                                                        threshold=0.1)
@@ -421,7 +421,7 @@ def Processor_Creation():
                 time.sleep(0.5)  # 等待更多数据到达
                 T = time.time()
                 print(T)
-                print(f"Stop event status in else: {stop_event.is_set()}")
+                #print(f"Stop event status in else: {stop_event.is_set()}")
                 if T - heart_beat > 20:
                     X = torch.stack(X_recording, dim=0)
                     Y = torch.stack(Y_recording, dim=0)
@@ -456,20 +456,6 @@ def Processor_Creation():
             if D_time < 1:
                 time.sleep(1 - D_time)
 
-    @app.route('/start', methods=['GET', 'POST'])
-    @login_required
-    def send_Msg():
-        if request.method == 'POST':
-            if not processing_event.is_set():
-                processing_event.set()  # 标记处理事件为已设置
-                user_email = current_user.user_email
-                threading.Thread(target=process_data,args=(user_email,)).start()
-            if not simulator.is_set():
-                simulator.set()
-                threading.Thread(target=Simulator).start()
-            print("Started")
-
-            return render_template('C_index.html', user=current_user)
 
     @app.route('/stop',methods =['POST'])
     @login_required
@@ -497,7 +483,14 @@ def Processor_Creation():
             audio, sr = librosa.load(io.BytesIO(file_content), sr=44100)
             print(audio.shape)
             flash('File successfully uploaded')
-
+            if not processing_event.is_set():
+                processing_event.set()  # 标记处理事件为已设置
+                user_email = current_user.user_email
+                threading.Thread(target=process_data,args=(user_email,)).start()
+            if not simulator.is_set():
+                simulator.set()
+                threading.Thread(target=Simulator).start()
+            print("Started")
             return render_template('C_index.html', user=current_user)
 
     return app
