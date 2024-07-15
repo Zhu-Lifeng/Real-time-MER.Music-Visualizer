@@ -11,4 +11,4 @@ Pillow
 openpyxl
 requests
 pymysql
-firebase-admin
+firebase_admin
