@@ -1,11 +1,13 @@
 from flask_login import UserMixin
-from . import db
 
+class User(UserMixin):
+    def __init__(self, user_id, user_email, user_name, user_password, user_age=None, user_gender=None):
+        self.user_id = user_id
+        self.user_email = user_email
+        self.user_name = user_name
+        self.user_password = user_password
+        self.user_age = user_age
+        self.user_gender = user_gender
 
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_name = db.Column(db.String(80), nullable=False)
-    user_email = db.Column(db.String(120), unique=True, nullable=False)
-    user_password = db.Column(db.String(120), nullable=False)
-    user_age = db.Column(db.Integer)
-    user_gender = db.Column(db.String(80), nullable=False)
+    def get_id(self):
+        return self.user_id
