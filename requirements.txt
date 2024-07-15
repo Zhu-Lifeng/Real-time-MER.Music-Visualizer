@@ -2,3 +2,12 @@ Flask
 librosa
 torch
 numpy==1.24.4
+google-cloud-storage
+flask_WTF
+flask_login
+flask_sqlalchemy
+pandas
+Pillow
+openpyxl
+requests
+pymysql
