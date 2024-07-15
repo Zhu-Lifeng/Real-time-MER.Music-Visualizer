@@ -14,6 +14,8 @@ import io
 from .MER_model import RCNN,DynamicPCALayer
 from flask_sqlalchemy import SQLAlchemy
 from google.cloud import storage
+
+
 db = SQLAlchemy()
 def Processor_Creation():
     app = Flask(__name__)
@@ -23,7 +25,7 @@ def Processor_Creation():
     login_manager.init_app(app)
 
     #db storage for account data
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///myDB.sqlite'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://DannyZ:19980706Dz@/Accounts?unix_socket=/cloudsql/phonic-botany-428915-s3:us-central1:music-v'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = '19980706'
     db.init_app(app)
