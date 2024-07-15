@@ -1,5 +1,5 @@
 import queue
-from flask import Flask, render_template, request, Response, jsonify,flash,url_for,redirect
+from flask import Flask, render_template, request, Response, jsonify, flash, url_for, redirect
 from flask_login import UserMixin, LoginManager, login_user, login_required, current_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import numpy as np
@@ -11,12 +11,11 @@ import math
 import torch
 import os
 import io
-from .MER_model import RCNN,DynamicPCALayer
-from flask_sqlalchemy import SQLAlchemy
+from .MER_model import RCNN, DynamicPCALayer
+import firebase_admin
+from firebase_admin import credentials, firestore
 from google.cloud import storage
 
-
-db = SQLAlchemy()
 def Processor_Creation():
     app = Flask(__name__)
     app.config['Password'] = 'UserPassword'
@@ -24,13 +23,14 @@ def Processor_Creation():
     login_manager.login_view = 'login'
     login_manager.init_app(app)
 
-    #db storage for account data
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://DannyZ:19980706Dz@/Accounts?unix_socket=/cloudsql/phonic-botany-428915-s3:us-central1:music-v'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SECRET_KEY'] = '19980706'
-    db.init_app(app)
+    # Initialize Firestore
+    cred = credentials.Certificate('phonic-botany-428915-s3-47cc5c28ee4c.json')
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
 
-    #GCS
+    app.config['SECRET_KEY'] = '19980706'
+
+    # GCS
     bucket_name = 'music-visualisation-app'
     storage_client = storage.Client()
     try:
@@ -41,17 +41,41 @@ def Processor_Creation():
         bucket = storage_client.create_bucket(bucket_name)
         print(f"Bucket {bucket_name} created.")
 
+    # Ensure users collection exists
+    def ensure_users_collection():
+        try:
+            # Attempt to get a document from the users collection
+            user_ref = db.collection('users').document('dummy')
+            user_ref.set({'check': True})  # This will create the collection if it doesn't exist
+            user_ref.delete()  # Clean up the dummy document
+            print("Users collection is ready.")
+        except Exception as e:
+            print(f"Error ensuring users collection: {e}")
+
+    ensure_users_collection()
 
     from .user_class import User
+
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(user_id)
-
+        user_ref = db.collection('users').document(user_id)
+        user = user_ref.get()
+        if user.exists:
+            user_data = user.to_dict()
+            return User(
+                user_id=user.id,
+                user_email=user_data['user_email'],
+                user_name=user_data['user_name'],
+                user_password=user_data['user_password'],
+                user_age=user_data.get('user_age'),
+                user_gender=user_data.get('user_gender')
+            )
+        return None
 
     long_term_store = []
     clients = []
     outputting = []
-    processing_event = threading.Event()  # 创建一个事件对象
+    processing_event = threading.Event()
     simulator = threading.Event()
     stop_event = threading.Event()
     lock = threading.Lock()
@@ -70,7 +94,6 @@ def Processor_Creation():
     def main():
         return render_template('C_index.html', user=current_user)
 
-
     @app.route('/login')
     def login():
         return render_template('login.html')
@@ -79,14 +102,26 @@ def Processor_Creation():
     def login_post():
         USER_email = request.form['user_email']
         USER_password = request.form['user_password']
-        # print(USER_email,USER_password)
-        USER = User.query.filter_by(user_email=USER_email).first()
+        user_ref = db.collection('users').where('user_email', '==', USER_email).limit(1).stream()
+        USER = None
+        for doc in user_ref:
+            USER = doc.to_dict()
+            USER['id'] = doc.id
+            break
 
-        if not USER or not check_password_hash(USER.user_password, USER_password):
+        if not USER or not check_password_hash(USER['user_password'], USER_password):
             flash('Please check your e-mail address or password.')
             return redirect(url_for('login'))
 
-        login_user(USER)
+        user_obj = User(
+            user_id=USER['id'],
+            user_email=USER['user_email'],
+            user_name=USER['user_name'],
+            user_password=USER['user_password'],
+            user_age=USER.get('user_age'),
+            user_gender=USER.get('user_gender')
+        )
+        login_user(user_obj)
         return redirect(url_for('main'))
 
     @app.route('/signup')
@@ -99,21 +134,37 @@ def Processor_Creation():
         USER_password = request.form.get('user_password')
         USER_name = request.form.get('user_name')
 
-        USER = User.query.filter_by(user_email=USER_email).first()
+        user_ref = db.collection('users').where('user_email', '==', USER_email).limit(1).stream()
+        USER = None
+        for doc in user_ref:
+            USER = doc.to_dict()
+            break
 
         if USER:
             flash('Email address already exists')
             return redirect(url_for('signup'))
 
-        NEW_USER = User(user_email=USER_email, user_name=USER_name,
-                        user_password=generate_password_hash(USER_password, method='pbkdf2:sha256'),
-                        user_age=25,user_gender='X')
+        NEW_USER = {
+            'user_email': USER_email,
+            'user_name': USER_name,
+            'user_password': generate_password_hash(USER_password, method='pbkdf2:sha256'),
+            'user_age': 25,
+            'user_gender': 'X'
+        }
 
-        # upload the new user information
-        db.session.add(NEW_USER)
-        db.session.commit()
+        user_ref = db.collection('users').add(NEW_USER)
+        user_id = user_ref[1].id
+        NEW_USER['id'] = user_id
 
-        login_user(NEW_USER)
+        user_obj = User(
+            user_id=user_id,
+            user_email=NEW_USER['user_email'],
+            user_name=NEW_USER['user_name'],
+            user_password=NEW_USER['user_password'],
+            user_age=NEW_USER.get('user_age'),
+            user_gender=NEW_USER.get('user_gender')
+        )
+        login_user(user_obj)
         return redirect(url_for('filling'))
 
     @app.route('/filling')
@@ -124,10 +175,11 @@ def Processor_Creation():
     @app.route('/filling', methods=['POST'])
     @login_required
     def filling_post():
-
-        current_user.user_age = request.form.get('user_age')
-        current_user.user_gender = request.form.get('user_gender')
-        db.session.commit()
+        user_ref = db.collection('users').document(current_user.user_id)
+        user_ref.update({
+            'user_age': request.form.get('user_age'),
+            'user_gender': request.form.get('user_gender')
+        })
         return redirect(url_for('main'))
 
     def send_to_clients(data):
@@ -380,8 +432,6 @@ def Processor_Creation():
                     print("uploaded")
                     return {"status": "Stopped"}, 200
 
-
-
     def Simulator():
         ssr = 44100
 
@@ -441,6 +491,5 @@ def Processor_Creation():
             flash('File successfully uploaded')
 
             return render_template('C_index.html', user=current_user)
-
 
     return app
