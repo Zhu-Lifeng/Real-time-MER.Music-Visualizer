@@ -210,7 +210,7 @@ def Processor_Creation():
             try:
                 while True:
                     try:
-                        data = q.get(timeout=10)  # 设置超时以避免长时间阻塞
+                        data = q.get(timeout=300)  # 设置超时以避免长时间阻塞
                         D_time = time.time() - P_time
                         if D_time < 0.1:
                             time.sleep(0.1-D_time)
