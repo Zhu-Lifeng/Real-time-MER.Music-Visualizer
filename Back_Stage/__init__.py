@@ -185,6 +185,8 @@ def Processor_Creation():
     @app.route('/logout')
     @login_required
     def logout():
+        long_term_store.clear()
+        stop_event.set()
         logout_user()
         return redirect(url_for('index'))
 
@@ -234,6 +236,7 @@ def Processor_Creation():
         middle = [250, 250]
         X_recording = []
         Y_recording = []
+        emotion_source = []
         heart_beat = time.time()
         ID = 1
         a = 0
@@ -241,7 +244,7 @@ def Processor_Creation():
         note_pic = []
         angle = np.linspace(0, 2 * math.pi, 360)
         radius = np.linspace(0, 250, 128)
-
+        Yc = torch.tensor([0,0])
         while True:
             if stop_event.is_set():
                 T = time.time()
@@ -273,35 +276,35 @@ def Processor_Creation():
                 print("working", l)
                 #print(f"Stop event status inside lock: {stop_event.is_set()}")
 
-            if l >= 220500:
+            if l >= 44100:
                 heart_beat = time.time()
                 with lock:
-                    short_term_store = long_term_store[:220500]
-                    del long_term_store[:220500]
+                    short_term_store = long_term_store[:44100]
+                    del long_term_store[:44100]
+                    emotion_source += short_term_store
                     print("cut", len(long_term_store))
                     #print(f"Stop event status after cutting: {stop_event.is_set()}")
 
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441,
                                                        threshold=0.1)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
-
-                S = librosa.feature.melspectrogram(y=np.array(short_term_store), sr=44100, n_mels=24, hop_length=441)
-                S_dB = librosa.power_to_db(S, ref=np.max)
-                zcr = librosa.feature.zero_crossing_rate(np.array(short_term_store), hop_length=441)
-                mfccs = librosa.feature.mfcc(y=np.array(short_term_store), sr=44100, n_mfcc=24, hop_length=441)
-                F = np.vstack((S_dB, zcr, mfccs))
-                F = [F]
-                F = torch.tensor(np.stack(F, axis=0))
-                F = F.reshape(1, F.shape[0], F.shape[1], F.shape[2])
-                F = [F[:, :, :, i * 50:i * 50 + 50] for i in range(10)]
-                F = torch.tensor(np.stack(F, axis=2))
-                X_recording.append(F)
-                Y = model(F.float())[0, :, :]
-                Y_recording.append(Y)
-                print(Y)
-
-                Yc = Y[0, :]
-
+                if len(emotion_source) >= 220500:
+                    S = librosa.feature.melspectrogram(y=np.array(emotion_source), sr=44100, n_mels=24, hop_length=441)
+                    S_dB = librosa.power_to_db(S, ref=np.max)
+                    zcr = librosa.feature.zero_crossing_rate(np.array(emotion_source), hop_length=441)
+                    mfccs = librosa.feature.mfcc(y=np.array(emotion_source), sr=44100, n_mfcc=24, hop_length=441)
+                    F = np.vstack((S_dB, zcr, mfccs))
+                    F = [F]
+                    F = torch.tensor(np.stack(F, axis=0))
+                    F = F.reshape(1, F.shape[0], F.shape[1], F.shape[2])
+                    F = [F[:, :, :, i * 50:i * 50 + 50] for i in range(10)]
+                    F = torch.tensor(np.stack(F, axis=2))
+                    X_recording.append(F)
+                    Y = model(F.float())[0, :, :]
+                    Y_recording.append(Y)
+                    Yc = Y[0, :]
+                    print(Yc)
+                    emotion_source=[]
                 for j in range(pitches.shape[1]):
                     start_time = time.time()
                     current_time = pitch_times[j] + time_record
@@ -339,7 +342,7 @@ def Processor_Creation():
                                 pitch_mag[midi_note] = magnitudes[i, j]
 
                     # 更新所有音符圆的信息
-                    if j % (pitches.shape[1] // 100) == 0:  # per 0.1s
+                    if j % (pitches.shape[1] // 10) == 0:  # per 0.1s
                         for p in range(128):
                             if pitch_active[p] == 0 and pitch_record[p] != 0:  # 需要消除的圆（已结束的音）
                                 note_pic = [item for item in note_pic if item["id"] != pitch_id[p]]
@@ -373,11 +376,14 @@ def Processor_Creation():
                                     s = 2
                                 elif (Yc[0] > 0) & (Yc[1] > 0):  # excited
                                     s = 3
-                                Emotion = "sad" if s == 0 else "relaxed" if s == 1 else "tense" if s == 2 else "excited"
+                                elif (Yc[0] == 0) & (Yc[0] == 0):
+                                    s = 4
+                                Emotion = "sad" if s == 0 else "relaxed" if s == 1 else "tense" if s == 2 else "excited"\
+                                    if s == 3 else "neutral"
 
-                                Hue_Base = [0, 90, 180, 270]
-                                Saturation_Base = [45, 50, 55, 60]
-                                Lightness_Base = [45, 50, 55, 60]
+                                Hue_Base = [0, 90, 180, 270, 90]
+                                Saturation_Base = [45, 50, 55, 60, 50]
+                                Lightness_Base = [45, 50, 55, 60, 50]
 
                                 Base = [Hue_Base[s], Saturation_Base[s], Lightness_Base[s]]
 
@@ -392,7 +398,7 @@ def Processor_Creation():
                                     f"hsl({Hue},"
                                     f"{Saturation}%,"
                                     f"{Lightness}%)")
-                                size = min(pitch_mag[p] / 100, 20)  # 初始圆的尺寸
+                                size = min(pitch_mag[p] / 50, 20)  # 初始圆的尺寸
                                 note_pic.append({
                                     "id": ID,
                                     "pitch": p,
