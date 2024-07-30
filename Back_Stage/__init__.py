@@ -15,7 +15,6 @@ from .MER_model import RCNN, DynamicPCALayer
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import storage
-
 def Processor_Creation():
     app = Flask(__name__)
     app.config['Password'] = 'UserPassword'
@@ -482,7 +481,7 @@ def Processor_Creation():
         if file.filename == '':
             return 'No selected file'
         if file:
-            filename =file.filename
+            #filename =file.filename
             #file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             #file.save(file_path)
             file_content=file.read()
@@ -498,5 +497,22 @@ def Processor_Creation():
                 threading.Thread(target=Simulator).start()
             print("Started")
             return render_template('C_index.html', user=current_user)
+
+
+    @app.route('/micro_received',methods=['POST'])
+    @login_required
+    def micro_received():
+        audio_file = request.files['audio']
+        audio_data = audio_file.read()
+        audio_stream = io.BytesIO(audio_data)
+        Data, sr = librosa.load(audio_stream, sr=44100)
+        print(len(Data))
+        with lock:
+            long_term_store.extend(Data)
+        if not processing_event.is_set():
+            processing_event.set()  # 标记处理事件为已设置
+            user_email = current_user.user_email
+            threading.Thread(target=process_data, args=(user_email,)).start()
+        return jsonify({'message': 'Audio data received successfully'})
 
     return app
