@@ -124,7 +124,6 @@
 
     <button id="toggleFileButton">File Reading Mode</button>
     <button id="toggleMicButton">Microphone Mode</button>
-
     <div id="Read_file" class="content">
         <h1>Upload a File</h1>
         <form action="/upload" method="post" enctype="multipart/form-data">
@@ -140,12 +139,11 @@
         {% endwith %}
     </div>
     <div id="Microphone" class="content">
-        <h1>Microphone Access</h1>
-        <button id="startButton">Start Microphone</button>
-        <audio id="audio" controls></audio>
+        <button id="startRecordingButton">Start Recording</button>
+        <button id="stopRecordingButton" disabled>Stop Recording</button>
     </div>
-
-    <script>
+    <script src="/static/js/recorder.js"></script>
+   <script>
         document.getElementById('toggleFileButton').addEventListener('click', function() {
             const content1 = document.getElementById('Read_file');
             const content2 = document.getElementById('Microphone');
@@ -171,6 +169,68 @@
             buttonMic.disabled = true;
             localStorage.setItem('selectedMode', 'Microphone');
         });
+
+        const startButton = document.getElementById('startRecordingButton');
+        const stopButton = document.getElementById('stopRecordingButton');
+
+        let audioContext;
+        let recorder;
+        let mediaStream;
+
+        async function startRecording() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const input = audioContext.createMediaStreamSource(mediaStream);
+            recorder = new Recorder(input, { numChannels: 1 });
+
+            recorder.record();
+            startButton.disabled = true;
+            stopButton.disabled = false;
+
+            // Capture and upload audio data every second
+            setInterval(async () => {
+                if (recorder && recorder.recording) {
+                    recorder.exportWAV(blob => {
+                        const formData = new FormData();
+                        formData.append('audio', blob, 'recording.wav');
+                        fetch('/micro_received', {
+                            method: 'POST',
+                            body: formData
+                        }).then(response => response.json())
+                        .then(data => console.log(data))
+                        .catch(error => console.error('Error:', error));
+                    });
+                    recorder.clear();
+                }
+            }, 1000);
+        }
+
+        async function stopRecording() {
+            recorder.stop();
+            mediaStream.getAudioTracks()[0].stop();
+            startButton.disabled = false;
+            stopButton.disabled = true;
+
+            // Notify the server that recording has stopped
+            fetch('/stop', {
+                method: 'POST'
+            }).then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+
+        // Restore the last selected mode on page load
+        window.onload = function() {
+            const selectedMode = localStorage.getItem('selectedMode');
+            if (selectedMode === 'Microphone') {
+                document.getElementById('toggleMicButton').click();
+            } else {
+                document.getElementById('toggleFileButton').click();
+            }
+        };
     </script>
 <form action="/logout">
             <button type="submit">Log out</button>
