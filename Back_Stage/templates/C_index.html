@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>Dynamic Circles from Python SSE</title>
     <style>
+        button[disabled] {
+    pointer-events: none;  /* 禁止所有鼠标事件 */
+    cursor: not-allowed;   /* 显示不可用的鼠标指针 */
+    opacity: 0.5;          /* 将按钮变为半透明 */
+}
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f4;
@@ -155,9 +160,12 @@
 
             <div id="emotionDisplay">Waiting for emotion data...</div>
 
-            <button id="openModal">Stop and Comment</button>
+
             <form action="/filling">
                 <button type="submit">Personal Detail & Customization Setting</button>
+            </form>
+            <form action="/logout">
+                <button type="submit">Log out</button>
             </form>
         </div>
 
@@ -168,10 +176,12 @@
 
             <div id="Read_file" class="content">
                 <h1>Upload a File</h1>
-                <form action="/upload" method="post" enctype="multipart/form-data">
-                    <input type="file" name="file">
-                    <input type="submit" value="Start">
+                <form action="/upload" method="post" enctype="multipart/form-data" id="file_start">
+                    <input type="file" name="file" id="file">
+                    <input type="submit" value="Start" id="start">
                 </form>
+                <div id="result"></div>
+
                 {% with messages = get_flashed_messages() %}
                     {% if messages %}
                         {% for message in messages %}
@@ -179,16 +189,34 @@
                         {% endfor %}
                     {% endif %}
                 {% endwith %}
+                <button id="openModal" disabled>Stop and Comment</button>
             </div>
+                <script type="text/javascript">
+                    var oM = document.getElementById('openModal')
+        document.getElementById('file_start').addEventListener('submit', function(event) {
+            event.preventDefault(); // 阻止表单的默认提交行为
 
+            let form = document.getElementById('file_start');
+            let formData = new FormData(form);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json()) // 假设服务器返回JSON格式的数据
+            .then(data => {
+                document.getElementById('result').innerText = data.message; // 处理返回的JSON数据
+            })
+            .catch(error => console.error('Error:', error));
+            oM.disabled =false;
+        });
+    </script>
             <div id="Microphone" class="content">
                 <button id="startRecordingButton">Start Recording</button>
-                <button id="stopRecordingButton" disabled>Stop Recording</button>
+                <button id="stopRecordingButton" disabled>Stop Recording and Comment</button>
             </div>
 
-            <form action="/logout">
-                <button type="submit">Log out</button>
-            </form>
+
         </div>
     </div>
 
@@ -265,6 +293,7 @@
             const buttonFile = document.getElementById('toggleFileButton');
             const buttonMic = document.getElementById('toggleMicButton');
 
+
             if (storedMode === 'Microphone') {
                 content1.classList.remove('active');
                 content2.classList.add('active');
@@ -303,7 +332,35 @@
             buttonMic.disabled = true;
             localStorage.setItem('selectedMode', 'Microphone');
         });
+           // Modal handling
+        var modal = document.getElementById("Comment");
+        var btn = document.getElementById("openModal");
+        var span = document.getElementsByClassName("close")[0];
 
+
+        btn.onclick = function() {
+
+            modal.style.display = "block";
+        }
+
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        var options = document.getElementsByClassName("option");
+        for (var i = 0; i < options.length; i++) {
+            options[i].onclick = function() {
+                var value = this.getAttribute("data-value");
+                var url = "/stop?value=" + value;
+                window.location.href = url;
+            }
+        }
         const startButton = document.getElementById('startRecordingButton');
         const stopButton = document.getElementById('stopRecordingButton');
 
@@ -343,12 +400,9 @@
             mediaStream.getAudioTracks()[0].stop();
             startButton.disabled = false;
             stopButton.disabled = true;
-
-            fetch('/stop', {
-                method: 'POST'
-            }).then(response => response.json())
-            .then(data => console.log(data))
-            .catch(error => console.error('Error:', error));
+            btn.disabled = false;
+            btn.click();
+            btn.disabled = true;
         }
 
         startButton.addEventListener('click', startRecording);
@@ -363,33 +417,7 @@
             }
         };
 
-        // Modal handling
-        var modal = document.getElementById("Comment");
-        var btn = document.getElementById("openModal");
-        var span = document.getElementsByClassName("close")[0];
 
-        btn.onclick = function() {
-            modal.style.display = "block";
-        }
-
-        span.onclick = function() {
-            modal.style.display = "none";
-        }
-
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-
-        var options = document.getElementsByClassName("option");
-        for (var i = 0; i < options.length; i++) {
-            options[i].onclick = function() {
-                var value = this.getAttribute("data-value");
-                var url = "/stop?value=" + value;
-                window.location.href = url;
-            }
-        }
     </script>
 
 </body>
