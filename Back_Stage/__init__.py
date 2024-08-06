@@ -226,16 +226,14 @@ def Processor_Creation():
         def gen():
             q = queue.Queue()
             clients.append(q)
-            P_time = 0
+
             try:
                 while True:
                     try:
-                        data = q.get(timeout=300)  # 设置超时以避免长时间阻塞
-                        D_time = time.time() - P_time
-                        if D_time < 0.1:
-                            time.sleep(0.1-D_time)
+                        data = q.get(timeout=3000)  # 设置超时以避免长时间阻塞
+
                         yield data
-                        P_time = time.time()
+
                     except queue.Empty:
                         # 如果超时没有数据，发送一个保持连接的心跳信号
                         # 注意: 心跳信号的内容需要符合客户端处理逻辑
@@ -247,6 +245,7 @@ def Processor_Creation():
         return Response(gen(), mimetype='text/event-stream')
 
     def process_data(user_email,user_hue_base,user_sat_base,user_lig_base):
+        print("Process started")
         pitch_record = np.zeros(128)
         pitch_mag = np.zeros(128)
         pitch_id = np.zeros(128)
@@ -379,6 +378,7 @@ def Processor_Creation():
 
                     # 更新所有音符圆的信息
                     if j % pitches.shape[1] == 0:  # per 0.1s
+                        Start_time = time.time()
                     #if j % (pitches.shape[1] // 10) == 0:  # per 0.1s
                         for p in range(128):
                             if pitch_active[p] == 0 and pitch_record[p] != 0:  # 需要消除的圆（已结束的音）
@@ -464,9 +464,9 @@ def Processor_Creation():
                         send_to_clients(f"data: {json_data}\n\n")
                         pitch_active = np.zeros(128)
                         pitch_mag = np.zeros(128)
-                        #d_time = time.time() - start_time
-                        #if d_time < 0.1:
-                            #time.sleep(0.1 - d_time)
+                        d_time = time.time() - Start_time
+                        if d_time < 0.1:
+                            time.sleep(0.1 - d_time)
                 time_record += pitch_times[-1]
             else:
                 time.sleep(0.1)  # 等待更多数据到达
@@ -507,18 +507,22 @@ def Processor_Creation():
     def upload_file():
         global audio, sr, file_path
         if 'file' not in request.files:
-            return 'No file part'
+            flash('No file part')
+            return render_template('C_index.html', user=current_user)
         file = request.files['file']
         if file.filename == '':
-            return 'No selected file'
+            flash('No selected file')
+            return render_template('C_index.html', user=current_user)
         if file:
             #filename =file.filename
             #file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             #file.save(file_path)
-            file_content=file.read()
+            file_content = file.read()
             audio, sr = librosa.load(io.BytesIO(file_content), sr=44100)
             print(audio.shape)
             flash('File successfully uploaded')
+            print(processing_event.is_set())
+            print(simulator.is_set())
             if not processing_event.is_set():
                 processing_event.set()  # 标记处理事件为已设置
                 user_email = current_user.user_email
@@ -530,7 +534,8 @@ def Processor_Creation():
                 simulator.set()
                 threading.Thread(target=Simulator).start()
             print("Started")
-            return render_template('C_index.html', user=current_user)
+            return jsonify({'message' : "Start"}),400
+            #return render_template('C_index.html', user=current_user)
 
 
     @app.route('/micro_received',methods=['POST'])
@@ -543,10 +548,14 @@ def Processor_Creation():
         print('Data',len(Data))
         with lock:
             long_term_store.extend(Data)
+        print(processing_event.is_set())
         if not processing_event.is_set():
             processing_event.set()  # 标记处理事件为已设置
             user_email = current_user.user_email
-            threading.Thread(target=process_data, args=(user_email,)).start()
+            user_hue_base = current_user.user_hue_base
+            user_sat_base = current_user.user_sat_base
+            user_lig_base = current_user.user_lig_base
+            threading.Thread(target=process_data, args=(user_email,user_hue_base,user_sat_base,user_lig_base)).start()
         return jsonify({'message': 'Audio data received successfully'})
 
     return app
