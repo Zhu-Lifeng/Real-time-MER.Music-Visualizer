@@ -5,101 +5,71 @@
     <title>Nutrient Intake Calculator</title>
     <style>
         body {
-            font-family: 'Arial';text-align: center;
-        }
-        .background-container {
-            position: relative;
-            height: 100vh;
-            background-image: url('{{ url_for('static', filename='background.jpg') }}');
-            background-size: 100% 100%;
-            background-position: center center;
-            background-repeat: no-repeat;
-        }
-        .white-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.4);
-            z-index: 1;
+            font-family: 'Arial';
+            text-align: center;
         }
         form {
-            max-width: 400px;
+            max-width: 1000px;
             margin: 20px auto;
-            background-color: rgb(255, 255, 255);
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
         }
         p, h2 {
-            z-index: 2;
-            position: relative;
-            color: #ff7e67; 
+            color: #ff7e67;
         }
-        input, select {
-            position: relative;
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            box-sizing: border-box; 
+        input {
+            width: 60px;
+            padding: 5px;
+            margin: 5px 0;
+            box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
-            z-index: 2;
         }
         button {
-            position: relative;
-            background-color: #ff7e67; 
+            background-color: #ff7e67;
             color: #fff;
             padding: 10px 15px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            z-index: 2;
         }
         button:hover {
-            background-color: #ff5c49; 
-        }.flex-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.form-group {
-    display: flex;
-    width: 100%;
-    margin-bottom: 10px;
-     align-items: center;
-}
-
-.form-group label {
-    min-width: 150px;
-     align-items: center;
-}
-
-input[type="number"], select {
-    flex-grow: 1;
-     align-items: center;
-}
-
-
-
-
+            background-color: #ff5c49;
+        }
+        .flex-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+        .emotion-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .color-preview {
+            width: 100px;
+            height: 100px;
+            margin-top: 10px;
+            border: 1px solid #000;
+        }
+        .label {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
-    <div class="background-container">
-        <div class="white-overlay"></div>
-        <form action="/filling" method="post">
-    <h2>Please fill in your personal detail</h2>
-    <div class="flex-container">
-        <div class="form-group">
+    <form action="/filling" method="post">
+        <h2>Please fill in your personal detail</h2>
+                <div class="form-group">
             <label>Your age is</label>
-            <input type="number" id="user_age" name="user_age" placeholder="{{ user.user_age }}" value="{{ user.user_age }}">years old
+            <input type="number" id="user_age" name="user_age" value="{{ user.user_age }}">years old
         </div>
         <div class="form-group">
             <label>Your gender is</label>
@@ -108,9 +78,76 @@ input[type="number"], select {
                 <option value="female"{% if user.user_gender == "female" %}selected{% endif %}>Female</option>
             </select>
         </div>
-    </div>
-    <button type="submit">Submit</button>
-</form>
-    </div>
+        <div class="flex-container">
+            <div class="emotion-group">
+                <div class="label">Emotion Label</div>
+                <div class="label">Hue</div>
+                <div class="label">Saturation</div>
+                <div class="label">Lightness</div>
+            </div>
+            <div class="emotion-group">
+                <div class="label">Sad / Bored</div>
+                <input type="number" id="lvla_H" name="lvla_H" value="{{ user.user_hue_base[0] }}" min="0" max="360" placeholder="Hue">
+                <input type="number" id="lvla_S" name="lvla_S" value="{{ user.user_sat_base[0] }}" min="0" max="100" placeholder="Sat">
+                <input type="number" id="lvla_L" name="lvla_L" value="{{ user.user_lig_base[0] }}" min="0" max="100" placeholder="Light">
+                <div class="color-preview" id="color_preview_lvla"></div>
+            </div>
+            <div class="emotion-group">
+                <div class="label">Content / Relaxed</div>
+                <input type="number" id="hvla_H" name="hvla_H" value="{{ user.user_hue_base[1] }}" min="0" max="360" placeholder="Hue">
+                <input type="number" id="hvla_S" name="hvla_S" value="{{ user.user_sat_base[1] }}" min="0" max="100" placeholder="Sat">
+                <input type="number" id="hvla_L" name="hvla_L" value="{{ user.user_lig_base[1] }}" min="0" max="100" placeholder="Light">
+                <div class="color-preview" id="color_preview_hvla"></div>
+            </div>
+            <div class="emotion-group">
+                <div class="label">Angry / Frustrated</div>
+                <input type="number" id="lvha_H" name="lvha_H" value="{{ user.user_hue_base[2] }}" min="0" max="360" placeholder="Hue">
+                <input type="number" id="lvha_S" name="lvha_S" value="{{ user.user_sat_base[2] }}" min="0" max="100" placeholder="Sat">
+                <input type="number" id="lvha_L" name="lvha_L" value="{{ user.user_lig_base[2] }}" min="0" max="100" placeholder="Light">
+                <div class="color-preview" id="color_preview_lvha"></div>
+            </div>
+            <div class="emotion-group">
+                <div class="label">Excited / Happy</div>
+                <input type="number" id="hvha_H" name="hvha_H" value="{{ user.user_hue_base[3] }}" min="0" max="360" placeholder="Hue">
+                <input type="number" id="hvha_S" name="hvha_S" value="{{ user.user_sat_base[3] }}" min="0" max="100" placeholder="Sat">
+                <input type="number" id="hvha_L" name="hvha_L" value="{{ user.user_lig_base[3] }}" min="0" max="100" placeholder="Light">
+                <div class="color-preview" id="color_preview_hvha"></div>
+            </div>
+            <div class="emotion-group">
+                <div class="label">Neutral</div>
+                <input type="number" id="nn_H" name="nn_H" value="{{ user.user_hue_base[4] }}" min="0" max="360" placeholder="Hue">
+                <input type="number" id="nn_S" name="nn_S" value="{{ user.user_sat_base[4] }}" min="0" max="100" placeholder="Sat">
+                <input type="number" id="nn_L" name="nn_L" value="{{ user.user_lig_base[4] }}" min="0" max="100" placeholder="Light">
+                <div class="color-preview" id="color_preview_nn"></div>
+            </div>
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+    <script>
+        function updateColor() {
+            // 获取输入值并更新色块的背景颜色
+            function setColorPreview(id_prefix) {
+                const hue = document.getElementById(id_prefix + '_H').value;
+                const saturation = document.getElementById(id_prefix + '_S').value;
+                const lightness = document.getElementById(id_prefix + '_L').value;
+                const hslColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                document.getElementById('color_preview_' + id_prefix).style.backgroundColor = hslColor;
+            }
+
+            setColorPreview('lvla');
+            setColorPreview('hvla');
+            setColorPreview('lvha');
+            setColorPreview('hvha');
+            setColorPreview('nn');
+        }
+
+        // 页面加载时调用一次，以显示初始颜色
+        updateColor();
+
+        // 监听输入框的变化
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('input', updateColor);
+        });
+    </script>
 </body>
 </html>
