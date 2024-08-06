@@ -1,21 +1,211 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <title>Dynamic Circles from Python SSE</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .left-panel,
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            flex: 1;
+            margin: 10px;
+        }
+
+        .left-panel {
+            align-items: center;
+        }
+
+        h1 {
+            color: #ff7e67;
+            margin-bottom: 20px;
+            text-align: center;
+            width: 100%;
+        }
+
+        svg {
+            border: 1px solid #000;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
         progress {
-            width: 300px; /* 设置进度条宽度 */
-            height: 20px; /* 设置进度条高度 */
+            width: 100%;
+            height: 20px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background-color: #ff7e67;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+            transition: background-color 0.3s ease-in-out;
+            width: 100%;
+            text-align: center;
+        }
+
+        button:hover {
+            background-color: #ff1493;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 300px;
+            text-align: left;
+            position: relative;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        .flash-message {
+            color: #f17465;
             margin-top: 10px;
         }
 
         .content {
             display: none;
+            margin-top: 20px;
         }
+
         .content.active {
             display: block;
         }
+
+        #emotionDisplay {
+            font-size: 24px;
+            color: #333;
+            margin: 20px 0;
+            text-align: center;
+        }
     </style>
-    <title>Dynamic Circles from Python SSE</title>
+</head>
+<body>
+
+    <div class="container">
+        <div class="left-panel">
+            <h1>Dynamic Circles</h1>
+            <svg id="svgContainer" width="400" height="400">
+            <circle cx="200" cy="200" r="200" stroke="gray" stroke-width="2" fill="none" opacity="0.5" ></circle>
+            <circle cx="200" cy="200" r="150" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle>
+            <circle cx="200" cy="200" r="100" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle>
+            <circle cx="200" cy="200" r="50" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle></svg>
+            <label for="arousalProgress">Arousal:</label>
+            <progress id="arousalProgress" value="50" max="100"></progress>
+            <span id="arousalValue">0</span>
+
+            <label for="valenceProgress">Valence:</label>
+            <progress id="valenceProgress" value="50" max="100"></progress>
+            <span id="valenceValue">0</span>
+
+            <div id="emotionDisplay">Waiting for emotion data...</div>
+
+            <button id="openModal">Stop and Comment</button>
+            <form action="/filling">
+                <button type="submit">Personal Detail & Customization Setting</button>
+            </form>
+        </div>
+
+        <div class="right-panel">
+            <h1>Choose the working mode</h1>
+            <button id="toggleFileButton">File Reading Mode</button>
+            <button id="toggleMicButton">Microphone Mode</button>
+
+            <div id="Read_file" class="content">
+                <h1>Upload a File</h1>
+                <form action="/upload" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file">
+                    <input type="submit" value="Start">
+                </form>
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="flash-message">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+
+            <div id="Microphone" class="content">
+                <button id="startRecordingButton">Start Recording</button>
+                <button id="stopRecordingButton" disabled>Stop Recording</button>
+            </div>
+
+            <form action="/logout">
+                <button type="submit">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="Comment" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <p>Select the recommended emotion:</p>
+            <button class="option" data-value="Sad / Bored">Sad / Bored</button>
+            <button class="option" data-value="Content / Relaxed">Content / Relaxed</button>
+            <button class="option" data-value="Angry / Frustrated">Angry / Frustrated</button>
+            <button class="option" data-value="Excited / Happy">Excited / Happy</button>
+            <button class="option" data-value="Neural">Neural</button>
+            <button class="option" data-value="cancel">Invalid</button>
+        </div>
+    </div>
+
+    <script src="/static/js/recorder.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             var svg = document.getElementById("svgContainer");
@@ -29,7 +219,6 @@
             eventSource.onmessage = function(event) {
                 var data = JSON.parse(event.data);
 
-                // 更新或添加圆
                 data.forEach(function(circle) {
                     var existingCircle = document.getElementById("circle-" + circle.id);
                     if (existingCircle) {
@@ -37,6 +226,7 @@
                         existingCircle.setAttribute("cy", circle.y);
                         existingCircle.setAttribute("r", circle.size);
                         existingCircle.setAttribute("fill", circle.color);
+                        existingCircle.setAttribute("opacity", circle.opacity);
                     } else {
                         var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
                         newCircle.setAttribute("id", "circle-" + circle.id);
@@ -49,21 +239,13 @@
                     }
                 });
 
-                // 移除过期的圆
-                var circles = svg.querySelectorAll("circle");
-                circles.forEach(function(circle) {
-                    var id = circle.getAttribute("id").split("-")[1];
-                    if (!data.some(d => d.id == id)) {
-                        svg.removeChild(circle);
-                    }
-                });
 
-                // 更新情绪、Arousal 和 Valence 显示
+
                 if (data.length) {
                     var latestData = data[data.length - 1];
                     emotionDisplay.textContent = "Current Emotion: " + latestData.emotion;
-                    var arousalPercent = ((latestData.arousal + 1) / 2) * 100; // -1~1 to 0~100
-                    var valencePercent = ((latestData.valence + 1) / 2) * 100; // -1~1 to 0~100
+                    var arousalPercent = ((latestData.arousal + 1) / 2) * 100;
+                    var valencePercent = ((latestData.valence + 1) / 2) * 100;
                     arousalProgress.value = arousalPercent;
                     valenceProgress.value = valencePercent;
                     arousalValue.textContent = latestData.arousal.toFixed(2);
@@ -77,7 +259,6 @@
                 console.error("EventSource failed.");
             };
 
-            // 读取本地存储中的状态
             const storedMode = localStorage.getItem('selectedMode');
             const content1 = document.getElementById('Read_file');
             const content2 = document.getElementById('Microphone');
@@ -96,54 +277,7 @@
                 buttonMic.disabled = false;
             }
         });
-    </script>
-</head>
-<body>
-    <svg id="svgContainer" width="500" height="500" style="border:1px solid #000000;"></svg>
-    <div id="emotionDisplay" style="font-size: 24px; color: #333; margin: 20px;">
-        Waiting for emotion data...
-    </div>
-     <!-- Arousal 进度条 -->
-    <label for="arousalProgress">Arousal:</label>
-    <progress id="arousalProgress" value="50" max="100" style="width: 300px; height: 20px;"></progress>
-    <span id="arousalValue">0</span>
 
-    <!-- Valence 进度条 -->
-    <label for="valenceProgress">Valence:</label>
-    <progress id="valenceProgress" value="50" max="100" style="width: 300px; height: 20px;"></progress>
-    <span id="valenceValue">0</span>
-
-
-    <form action="/stop" method="post">
-        <button type="submit">Clear & Back</button>
-    </form>
-
-
-
-    <h1>Choose the working mode</h1>
-
-    <button id="toggleFileButton">File Reading Mode</button>
-    <button id="toggleMicButton">Microphone Mode</button>
-    <div id="Read_file" class="content">
-        <h1>Upload a File</h1>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <input lang="en" type="file" value="Select File" name="file" >
-            <input type="submit" value="Start">
-        </form>
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="flash-message">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>
-    <div id="Microphone" class="content">
-        <button id="startRecordingButton">Start Recording</button>
-        <button id="stopRecordingButton" disabled>Stop Recording</button>
-    </div>
-    <script src="/static/js/recorder.js"></script>
-   <script>
         document.getElementById('toggleFileButton').addEventListener('click', function() {
             const content1 = document.getElementById('Read_file');
             const content2 = document.getElementById('Microphone');
@@ -187,7 +321,6 @@
             startButton.disabled = true;
             stopButton.disabled = false;
 
-            // Capture and upload audio data every second
             setInterval(async () => {
                 if (recorder && recorder.recording) {
                     recorder.exportWAV(blob => {
@@ -202,7 +335,7 @@
                     });
                     recorder.clear();
                 }
-            }, 1000);
+            }, 100);
         }
 
         async function stopRecording() {
@@ -211,7 +344,6 @@
             startButton.disabled = false;
             stopButton.disabled = true;
 
-            // Notify the server that recording has stopped
             fetch('/stop', {
                 method: 'POST'
             }).then(response => response.json())
@@ -222,7 +354,6 @@
         startButton.addEventListener('click', startRecording);
         stopButton.addEventListener('click', stopRecording);
 
-        // Restore the last selected mode on page load
         window.onload = function() {
             const selectedMode = localStorage.getItem('selectedMode');
             if (selectedMode === 'Microphone') {
@@ -231,9 +362,35 @@
                 document.getElementById('toggleFileButton').click();
             }
         };
+
+        // Modal handling
+        var modal = document.getElementById("Comment");
+        var btn = document.getElementById("openModal");
+        var span = document.getElementsByClassName("close")[0];
+
+        btn.onclick = function() {
+            modal.style.display = "block";
+        }
+
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        var options = document.getElementsByClassName("option");
+        for (var i = 0; i < options.length; i++) {
+            options[i].onclick = function() {
+                var value = this.getAttribute("data-value");
+                var url = "/stop?value=" + value;
+                window.location.href = url;
+            }
+        }
     </script>
-<form action="/logout">
-            <button type="submit">Log out</button>
-        </form>
+
 </body>
 </html>
