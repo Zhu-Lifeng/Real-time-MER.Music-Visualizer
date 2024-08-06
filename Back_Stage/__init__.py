@@ -534,7 +534,7 @@ def Processor_Creation():
                 simulator.set()
                 threading.Thread(target=Simulator).start()
             print("Started")
-            return jsonify({'message' : "Start"}),400
+            return jsonify({'message' : "Start"}),200
             #return render_template('C_index.html', user=current_user)
 
 
