@@ -52,7 +52,7 @@
         }
 
         svg {
-            border: 1px solid #000;
+            border: 0px solid #000;
             margin-bottom: 20px;
         }
 
@@ -146,7 +146,7 @@
         <div class="left-panel">
             <h1>Dynamic Circles</h1>
             <svg id="svgContainer" width="400" height="400">
-            <circle cx="200" cy="200" r="200" stroke="gray" stroke-width="2" fill="none" opacity="0.5" ></circle>
+            <circle cx="200" cy="200" r="195" stroke="gray" stroke-width="2" fill="none" opacity="0.5" ></circle>
             <circle cx="200" cy="200" r="150" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle>
             <circle cx="200" cy="200" r="100" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle>
             <circle cx="200" cy="200" r="50" stroke="gray" stroke-width="2" fill="none" opacity="0.5"></circle></svg>
@@ -361,52 +361,62 @@
                 window.location.href = url;
             }
         }
-        const startButton = document.getElementById('startRecordingButton');
-        const stopButton = document.getElementById('stopRecordingButton');
+const startButton = document.getElementById('startRecordingButton');
+const stopButton = document.getElementById('stopRecordingButton');
 
-        let audioContext;
-        let recorder;
-        let mediaStream;
+let audioContext;
+let recorder;
+let mediaStream;
+let intervalId;
 
-        async function startRecording() {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const input = audioContext.createMediaStreamSource(mediaStream);
-            recorder = new Recorder(input, { numChannels: 1 });
+async function startRecording() {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const input = audioContext.createMediaStreamSource(mediaStream);
+    recorder = new Recorder(input, { numChannels: 1 });
 
-            recorder.record();
-            startButton.disabled = true;
-            stopButton.disabled = false;
+    recorder.record(); // 开始持续录音
+    startButton.disabled = true;
+    stopButton.disabled = false;
 
-            setInterval(async () => {
-                if (recorder && recorder.recording) {
-                    recorder.exportWAV(blob => {
-                        const formData = new FormData();
-                        formData.append('audio', blob, 'recording.wav');
-                        fetch('/micro_received', {
-                            method: 'POST',
-                            body: formData
-                        }).then(response => response.json())
-                        .then(data => console.log(data))
-                        .catch(error => console.error('Error:', error));
-                    });
-                    recorder.clear();
-                }
-            }, 100);
+    intervalId = setInterval(async () => {
+        if (recorder && recorder.recording) {
+            // 导出录音的前0.1秒数据
+            recorder.exportWAV(async (blob) => {
+                // 上传音频数据
+                const formData = new FormData();
+                formData.append('audio', blob, 'recording.wav');
+                fetch('/micro_received', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => console.log(data))
+                .catch(error => console.error('Error:', error));
+
+                // 清理已上传的0.1秒音频数据
+                recorder.clear(); // 清除已处理的音频数据
+                recorder.record(); // 继续录音
+            });
         }
+    }, 100); // 每0.1秒处理一次
+}
 
-        async function stopRecording() {
-            recorder.stop();
-            mediaStream.getAudioTracks()[0].stop();
-            startButton.disabled = false;
-            stopButton.disabled = true;
-            btn.disabled = false;
-            btn.click();
-            btn.disabled = true;
-        }
+async function stopRecording() {
+    clearInterval(intervalId); // 停止定时器
+    recorder.stop(); // 停止录音器
+    mediaStream.getAudioTracks()[0].stop(); // 停止音频流
+    startButton.disabled = false;
+    stopButton.disabled = true;
+    btn.disabled = false;
+    btn.click();
+    btn.disabled = true;
+}
 
-        startButton.addEventListener('click', startRecording);
-        stopButton.addEventListener('click', stopRecording);
+startButton.addEventListener('click', startRecording);
+stopButton.addEventListener('click', stopRecording);
+
+
 
         window.onload = function() {
             const selectedMode = localStorage.getItem('selectedMode');
