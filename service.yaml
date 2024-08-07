@@ -2,7 +2,7 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: musicvisualization
-  namespace: default
+  namespace: phonic-botany-428915-s3
 spec:
   template:
     spec:
