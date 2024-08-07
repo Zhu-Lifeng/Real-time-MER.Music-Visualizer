@@ -86,7 +86,7 @@ def Processor_Creation():
     feedback_value = ""
     X_recording = []
     Y_recording = []
-    Yc = torch.tensor([0, 0])
+    Yc = [0, 0]
     processing_event = threading.Event()
     mer_event = threading.Event()
     simulator = threading.Event()
@@ -326,8 +326,8 @@ def Processor_Creation():
             X_recording.append(F)
             Y = model(F.float())
             with lock:
-                Yc = Y[0, :]
-                Y_recording.append(Yc)
+                Y_recording.append(Y[0, :])
+                Yc = Y[0, :].tolist()
             print(Yc)
             time.sleep(1)
 
@@ -366,10 +366,10 @@ def Processor_Creation():
                 with lock:
                     short_term_store = long_term_store[:4410]
                     del long_term_store[:4410]
-
+                    
                     T_receiving.append(time.time())
                     emotion_source.extend(short_term_store)
-
+                
                 print("cut", l, len(long_term_store))
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
@@ -439,8 +439,8 @@ def Processor_Creation():
 
                                 H = Base[0] + int((p % 16)/8* Control_Range[0]) * Coff[0]
                                 Hue = H if H < 360 else 360 - H
-                                Saturation = (Base[1] + abs(Yc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
-                                Lightness = (Base[2] + abs(Yc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
+                                Saturation = (Base[1] + abs(Ycc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
+                                Lightness = (Base[2] + abs(Ycc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
 
                                 color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
                                 print(pitch_mag[p])
@@ -454,8 +454,8 @@ def Processor_Creation():
                                     "color": color,
                                     "opacity": 1,
                                     "emotion": Emotion,
-                                    "arousal": Yc[0].float().item(),
-                                    "valence": Yc[1].float().item(),
+                                    "arousal": Ycc[0],
+                                    "valence": Ycc[1],
                                     "life": 30
                                 })
                                 pitch_id[p] = ID
