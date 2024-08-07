@@ -1,0 +1,14 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: musicvisualization
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - image: your-image-name:latest
+        resources:
+          limits:
+            cpu: "4"            # 4 vCPU
+            memory: "16Gi"      # 16 GiB 内存
