@@ -54,27 +54,7 @@ def Processor_Creation():
             print(f"Error ensuring users collection: {e}")
 
     ensure_users_collection()
-    long_term_store = []
-    clients = []
-    outputting = []
-    T_sending = []
-    T_receiving = []
-    T_display = []
-    emotion_source = []
-    feedback_value = ""
-    X_recording = []
-    Y_recording = []
-    Y_c = [0, 0]
-    processing_event = threading.Event()
-    mer_event = threading.Event()
-    simulator = threading.Event()
-    stop_event = threading.Event()
-    lock = threading.Lock()
-    model = RCNN()
-    model_path = 'Back_Stage/best_model_10s_100.pth'
-    pca_paths = ['Back_Stage/pca1_10s_100.pkl']
-    model.load_model(model_path, pca_paths)
-    model.eval()
+
     from .user_class import User
 
     @login_manager.user_loader
@@ -96,7 +76,26 @@ def Processor_Creation():
             )
         return None
 
-
+    long_term_store = []
+    clients = []
+    T_sending = []
+    T_receiving = []
+    T_display = []
+    emotion_source = []
+    feedback_value = ""
+    X_recording = []
+    Y_recording = []
+    Y_c = {"value" : [0, 0]}
+    processing_event = threading.Event()
+    mer_event = threading.Event()
+    simulator = threading.Event()
+    stop_event = threading.Event()
+    lock = threading.Lock()
+    model = RCNN()
+    model_path = 'Back_Stage/best_model_10s_100.pth'
+    pca_paths = ['Back_Stage/pca1_10s_100.pkl']
+    model.load_model(model_path, pca_paths)
+    model.eval()
 
     @app.route('/')
     def index():
@@ -301,9 +300,9 @@ def Processor_Creation():
 
     def MER():
         print("MER Started")
-        global Y_c
         while True:
-            print("MER_stop", stop_event.is_set())
+            mer=0
+            Start_time=time.time()
             if stop_event.is_set():
                 return {"status": "Stopped"}, 200
 
@@ -311,28 +310,32 @@ def Processor_Creation():
                 l = len(emotion_source)
                 print("MER", l)
                 if l >= 441000:
+                    mer=1
                     ess = np.array(emotion_source[-441000:])
-                    del emotion_source[:-441000]
-                else:
+                    del emotion_source[:-44100*9]
+                elif l >= 44100:
+                    mer=1
                     ess = np.zeros(441000)
                     ess[:l] = np.array(emotion_source)
-            S = librosa.feature.melspectrogram(y=ess, sr=44100, n_mels=26, hop_length=441)
-            S_dB = librosa.power_to_db(S, ref=np.max)
-            zcr = librosa.feature.zero_crossing_rate(ess, hop_length=441)
-            mfccs = librosa.feature.mfcc(y=ess, sr=44100, n_mfcc=26, hop_length=441)
-            F = torch.tensor(np.stack([np.vstack((S_dB, zcr, mfccs))], axis=0))
-            F = [F[:, :, i * 100:i * 100 + 100] for i in range(10)]
-            F = torch.tensor(np.stack(F, axis=1))
-            X_recording.append(F)
-            Y = model(F.float())
-            with lock:
+            if mer==1:
+                S = librosa.feature.melspectrogram(y=ess, sr=44100, n_mels=26, hop_length=441)
+                S_dB = librosa.power_to_db(S, ref=np.max)
+                zcr = librosa.feature.zero_crossing_rate(ess, hop_length=441)
+                mfccs = librosa.feature.mfcc(y=ess, sr=44100, n_mfcc=26, hop_length=441)
+                F = torch.tensor(np.stack([np.vstack((S_dB, zcr, mfccs))], axis=0))
+                F = [F[:, :, i * 100:i * 100 + 100] for i in range(10)]
+                F = torch.tensor(np.stack(F, axis=1))
+                X_recording.append(F)
+                Y = model(F.float())
                 Y_recording.append(Y[0, :])
-                Y_c = Y[0, :].tolist()
-            print(Y_c)
-            time.sleep(1)
+                with lock:
+                    Y_c["value"] = Y[0, :].tolist()
+                    print(Y_c)
+            time.sleep(1-(Start_time-time.time()))
 
     def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
-        global feedback_value, Y_c
+        global feedback_value
+
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -343,6 +346,8 @@ def Processor_Creation():
         middle = [200, 200]
         ID = 1
         a = 0
+        EC=0
+        Ycc = Y_c['value']
         pitch_active = np.zeros(128)
         note_pic = []
         angle = np.linspace(0, 2 * math.pi, 360)
@@ -366,14 +371,17 @@ def Processor_Creation():
                 with lock:
                     short_term_store = long_term_store[:4410]
                     del long_term_store[:4410]
-
                     T_receiving.append(time.time())
                     emotion_source.extend(short_term_store)
-
-                print("cut", l, len(long_term_store))
+                EC+=1
+                #print("cut", l, len(long_term_store))
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
-
+                if EC==10:
+                    with lock:
+                        Ycc = Y_c['value']
+                    print(Ycc)
+                    EC = 0
                 for j in range(pitches.shape[1]):
                     current_time = pitch_times[j] + time_record
                     for i in range(pitches.shape[0]):
@@ -398,7 +406,7 @@ def Processor_Creation():
                         for element in note_pic:
                             element["size"] += 0.5
                             element["life"] -= 1
-                            element["opacity"] = 1 - (30 - element["life"]) * 0.03
+                            element["opacity"] = 1 - (10 - element["life"]) * 0.1
                         note_pic = [item for item in note_pic if item['life'] > 0]
                         for p in range(128):
                             if pitch_active[p] != 0 and pitch_record[p] == 0 and current_time - pitch_record[p] > 0.05:
@@ -412,8 +420,6 @@ def Processor_Creation():
                                 radius_N = radius[p]
                                 x = middle[0] + radius_N * math.cos(angle_N)
                                 y = middle[1] + radius_N * math.sin(angle_N)
-                                with lock:
-                                    Ycc = Y_c
                                 if ((Ycc[0] < 0) & (Ycc[1] < 0)) & ((Ycc[0] < -0.1) | (Ycc[1] < -0.1)):
                                     s = 0  # Sad / Bored
                                 elif ((Ycc[0] < 0) & (Ycc[1] > 0)) & ((Ycc[0] < -0.1) | (Ycc[1] > 0.1)):
@@ -443,8 +449,7 @@ def Processor_Creation():
                                 Lightness = (Base[2] + abs(Ycc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
 
                                 color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
-                                print(pitch_mag[p])
-                                size = min( max(pitch_mag[p]/5,1) , 50)
+                                size = min( max(pitch_mag[p]/2.5 ,1), 50)
                                 note_pic.append({
                                     "id": ID,
                                     "pitch": p,
@@ -456,7 +461,7 @@ def Processor_Creation():
                                     "emotion": Emotion,
                                     "arousal": Ycc[0],
                                     "valence": Ycc[1],
-                                    "life": 30
+                                    "life": 10
                                 })
                                 pitch_id[p] = ID
                                 pitch_record[p] = current_time
@@ -474,7 +479,7 @@ def Processor_Creation():
             else:
                 time.sleep(0.1)  # 等待更多数据到达
                 T = time.time()
-                print("wait", T)
+
 
     def Simulator():
         ssr = 4410
@@ -491,7 +496,6 @@ def Processor_Creation():
                 l = len(long_term_store)
                 long_term_store.extend(data)
                 T_sending.append(time.time())
-                print("append", l, len(long_term_store))
             D_time = time.time() - start_time
             if D_time < 0.1:
                 time.sleep(0.1 - D_time)
@@ -513,7 +517,7 @@ def Processor_Creation():
     @app.route('/upload', methods=['POST'])
     @login_required
     def upload_file():
-        global audio, sr, file_path
+        global audio, file_path
         if 'file' not in request.files:
             flash('No file part')
             return render_template('C_index.html', user=current_user)
@@ -552,7 +556,6 @@ def Processor_Creation():
         with lock:
             l = len(long_term_store)
             long_term_store.extend(Data)
-            print("append", l, len(long_term_store))
             T_sending.append(time.time())
 
         if not processing_event.is_set():
