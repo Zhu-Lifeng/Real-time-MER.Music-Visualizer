@@ -398,7 +398,7 @@ def Processor_Creation():
                         for element in note_pic:
                             element["size"] += 0.5
                             element["life"] -= 1
-                            element["opacity"] = 1 - (10 - element["life"]) * 0.1
+                            element["opacity"] = 1 - (30 - element["life"]) * 0.03
                         note_pic = [item for item in note_pic if item['life'] > 0]
                         for p in range(128):
                             if pitch_active[p] != 0 and pitch_record[p] == 0 and current_time - pitch_record[p] > 0.05:
@@ -434,11 +434,11 @@ def Processor_Creation():
 
                                 Base = [Hue_Base[s], Saturation_Base[s], Lightness_Base[s]]
 
-                                Control_Range = [20, 20, 20]
+                                Control_Range = [40, 20, 20]
 
                                 Coff = [1, 1, 1]
 
-                                H = Base[0] + int((p % 16) * Control_Range[0]) * Coff[0]
+                                H = Base[0] + int((p % 16)/8* Control_Range[0]) * Coff[0]
                                 Hue = H if H < 360 else 360 - H
                                 Saturation = (Base[1] + abs(Yc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
                                 Lightness = (Base[2] + abs(Yc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
@@ -457,7 +457,7 @@ def Processor_Creation():
                                     "emotion": Emotion,
                                     "arousal": Yc[0].float().item(),
                                     "valence": Yc[1].float().item(),
-                                    "life": 10
+                                    "life": 30
                                 })
                                 pitch_id[p] = ID
                                 pitch_record[p] = current_time
