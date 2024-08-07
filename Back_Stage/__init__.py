@@ -86,7 +86,7 @@ def Processor_Creation():
     feedback_value = ""
     X_recording = []
     Y_recording = []
-    Yc = [0, 0]
+    Y_c = [0, 0]
     processing_event = threading.Event()
     mer_event = threading.Event()
     simulator = threading.Event()
@@ -301,7 +301,7 @@ def Processor_Creation():
 
     def MER():
         print("MER Started")
-        global Yc
+        global Y_c
         while True:
             print("MER_stop", stop_event.is_set())
             if stop_event.is_set():
@@ -327,12 +327,12 @@ def Processor_Creation():
             Y = model(F.float())
             with lock:
                 Y_recording.append(Y[0, :])
-                Yc = Y[0, :].tolist()
-            print(Yc)
+                Y_c = Y[0, :].tolist()
+            print(Y_c)
             time.sleep(1)
 
     def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
-        global feedback_value, Yc
+        global feedback_value, Y_c
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -366,10 +366,10 @@ def Processor_Creation():
                 with lock:
                     short_term_store = long_term_store[:4410]
                     del long_term_store[:4410]
-                    
+
                     T_receiving.append(time.time())
                     emotion_source.extend(short_term_store)
-                
+
                 print("cut", l, len(long_term_store))
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
@@ -413,7 +413,7 @@ def Processor_Creation():
                                 x = middle[0] + radius_N * math.cos(angle_N)
                                 y = middle[1] + radius_N * math.sin(angle_N)
                                 with lock:
-                                    Ycc = Yc
+                                    Ycc = Y_c
                                 if ((Ycc[0] < 0) & (Ycc[1] < 0)) & ((Ycc[0] < -0.1) | (Ycc[1] < -0.1)):
                                     s = 0  # Sad / Bored
                                 elif ((Ycc[0] < 0) & (Ycc[1] > 0)) & ((Ycc[0] < -0.1) | (Ycc[1] > 0.1)):
