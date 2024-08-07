@@ -16,7 +16,6 @@ from .MER_model import RCNN, DynamicPCALayer_Seq
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import storage
-import redis
 def Processor_Creation():
     app = Flask(__name__)
     app.config['Password'] = 'UserPassword'
