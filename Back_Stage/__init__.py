@@ -16,7 +16,7 @@ from .MER_model import RCNN, DynamicPCALayer_Seq
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import storage
-
+import redis
 def Processor_Creation():
     app = Flask(__name__)
     app.config['Password'] = 'UserPassword'
@@ -41,7 +41,15 @@ def Processor_Creation():
         print(f"Bucket {bucket_name} does not exist. Creating new bucket.")
         bucket = storage_client.create_bucket(bucket_name)
         print(f"Bucket {bucket_name} created.")
-
+    # redis
+    redis_client = redis.Redis(host="10.40.213.72",port=6379,db=0)
+    if redis_client.exists('Yc'):
+        Yc = torch.tensor(eval(redis_client.get('Yc')))
+        print("Yc loaded from Redis:", Yc)
+    else:
+        Yc = torch.tensor([0, 0])
+        redis_client.set('Yc', Yc.numpy().tolist())
+        print("Yc not found in Redis, created new Yc:", Yc)
     # Ensure users collection exists
     def ensure_users_collection():
         try:
@@ -86,7 +94,7 @@ def Processor_Creation():
     feedback_value = ""
     X_recording = []
     Y_recording = []
-    Yc = torch.tensor([0, 0])
+
     processing_event = threading.Event()
     mer_event = threading.Event()
     simulator = threading.Event()
@@ -301,7 +309,6 @@ def Processor_Creation():
 
     def MER():
         print("MER Started")
-        global Yc
         while True:
             print("MER_stop", stop_event.is_set())
             if stop_event.is_set():
@@ -326,13 +333,13 @@ def Processor_Creation():
             X_recording.append(F)
             Y = model(F.float())
             with lock:
-                Yc = Y[0, :]
-                Y_recording.append(Yc)
-            print(Yc)
+                redis_client.set('Yc', Y[0, :].numpy().tolist())
+                Y_recording.append(Y[0, :])
+            print(Y[0, :])
             time.sleep(1)
 
     def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
-        global feedback_value, Yc
+        global feedback_value
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -414,7 +421,7 @@ def Processor_Creation():
                                 y = middle[1] + radius_N * math.sin(angle_N)
                                 with lock:
                                     print("Processor receive",Yc)
-                                    Ycc = Yc
+                                    Ycc = torch.tensor(eval(redis_client.get('Yc')))
                                 if ((Ycc[0] < 0) & (Ycc[1] < 0)) & ((Ycc[0] < -0.1) | (Ycc[1] < -0.1)):
                                     s = 0  # Sad / Bored
                                 elif ((Ycc[0] < 0) & (Ycc[1] > 0)) & ((Ycc[0] < -0.1) | (Ycc[1] > 0.1)):
@@ -440,8 +447,8 @@ def Processor_Creation():
 
                                 H = Base[0] + int((p % 16)/8* Control_Range[0]) * Coff[0]
                                 Hue = H if H < 360 else 360 - H
-                                Saturation = (Base[1] + abs(Yc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
-                                Lightness = (Base[2] + abs(Yc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
+                                Saturation = (Base[1] + abs(Ycc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
+                                Lightness = (Base[2] + abs(Ycc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
 
                                 color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
                                 print(pitch_mag[p])
@@ -455,8 +462,8 @@ def Processor_Creation():
                                     "color": color,
                                     "opacity": 1,
                                     "emotion": Emotion,
-                                    "arousal": Yc[0].float().item(),
-                                    "valence": Yc[1].float().item(),
+                                    "arousal": Ycc[0].float().item(),
+                                    "valence": Ycc[1].float().item(),
                                     "life": 30
                                 })
                                 pitch_id[p] = ID
