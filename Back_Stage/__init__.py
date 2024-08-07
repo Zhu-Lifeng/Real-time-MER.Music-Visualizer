@@ -16,6 +16,7 @@ from .MER_model import RCNN, DynamicPCALayer_Seq
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import storage
+
 def Processor_Creation():
     app = Flask(__name__)
     app.config['Password'] = 'UserPassword'
@@ -81,8 +82,13 @@ def Processor_Creation():
     T_sending = []
     T_receiving = []
     T_display = []
+    emotion_source = []
     feedback_value = ""
+    X_recording = []
+    Y_recording = []
+
     processing_event = threading.Event()
+    mer_event = threading.Event()
     simulator = threading.Event()
     stop_event = threading.Event()
     lock = threading.Lock()
@@ -195,12 +201,18 @@ def Processor_Creation():
         user_ref.update({
             'user_age': int(request.form.get('user_age')),
             'user_gender': request.form.get('user_gender'),
-            'user_hue_base': [int(request.form.get('lvla_H')),int(request.form.get('hvla_H')),int(request.form.get('lvha_H')),
-                              int(request.form.get('hvha_H')),int(request.form.get('nn_H'))],
-            'user_sat_base': [int(request.form.get('lvla_S')), int(request.form.get('hvla_S')), int(request.form.get('lvha_S')),
-                              int(request.form.get('hvha_S')), int(request.form.get('nn_S'))],
-            'user_lig_base': [int(request.form.get('lvla_L')), int(request.form.get('hvla_L')), int(request.form.get('lvha_L')),
-                              int(request.form.get('hvha_L')), int(request.form.get('nn_L'))]
+            'user_hue_base': [
+                int(request.form.get('lvla_H')), int(request.form.get('hvla_H')), int(request.form.get('lvha_H')),
+                int(request.form.get('hvha_H')), int(request.form.get('nn_H'))
+            ],
+            'user_sat_base': [
+                int(request.form.get('lvla_S')), int(request.form.get('hvla_S')), int(request.form.get('lvha_S')),
+                int(request.form.get('hvha_S')), int(request.form.get('nn_S'))
+            ],
+            'user_lig_base': [
+                int(request.form.get('lvla_L')), int(request.form.get('hvla_L')), int(request.form.get('lvha_L')),
+                int(request.form.get('hvha_L')), int(request.form.get('nn_L'))
+            ]
         })
         return redirect(url_for('main'))
 
@@ -211,8 +223,6 @@ def Processor_Creation():
         stop_event.set()
         logout_user()
         return redirect(url_for('index'))
-
-
 
     def send_to_clients(data):
         dead_clients = []
@@ -240,7 +250,6 @@ def Processor_Creation():
 
                     except queue.Empty:
                         # 如果超时没有数据，发送一个保持连接的心跳信号
-                        # 注意: 心跳信号的内容需要符合客户端处理逻辑
                         yield 'data: {}\n\n'  # 发送空数据包来保持连接
             except GeneratorExit:
                 # 当客户端断开连接时，清理操作
@@ -248,8 +257,82 @@ def Processor_Creation():
 
         return Response(gen(), mimetype='text/event-stream')
 
-    def process_data(user_email,user_hue_base,user_sat_base,user_lig_base):
-        global feedback_value
+    def database_upload(user_email):
+        T = time.time()
+        X = torch.stack(X_recording, dim=0)
+        Y = torch.stack(Y_recording, dim=0)
+        E = feedback_value
+        blob_path_X = f"{user_email}/{T}/X.pt"
+        blob_path_Y = f"{user_email}/{T}/Y.pt"
+        blob_path_E = f"{user_email}/{T}/E.txt"
+        X_stream = io.BytesIO()
+        Y_stream = io.BytesIO()
+        E_stream = io.BytesIO()
+        torch.save(X, X_stream)
+        X_stream.seek(0)
+        torch.save(Y, Y_stream)
+        Y_stream.seek(0)
+        E_stream.write(E.encode('utf-8'))
+        E_stream.seek(0)
+        blob_X = bucket.blob(blob_path_X)
+        blob_Y = bucket.blob(blob_path_Y)
+        blob_E = bucket.blob(blob_path_E)
+        blob_X.upload_from_file(X_stream)
+        blob_Y.upload_from_file(Y_stream)
+        blob_E.upload_from_file(E_stream, content_type='text/plain')
+        min_length = min(len(T_sending), len(T_receiving), len(T_display))
+        csv_stream = io.BytesIO()
+        text_stream = io.TextIOWrapper(csv_stream, encoding='utf-8', newline='')
+        csv_writer = csv.writer(text_stream)
+
+        for i in range(min_length):
+            csv_writer.writerow([T_sending[i], T_receiving[i], T_display[i]])
+
+        text_stream.flush()
+        csv_stream.seek(0)
+        blob_path_TD = f"{user_email}/{T}/Time_recording.csv"
+        blob_TD = bucket.blob(blob_path_TD)
+        blob_TD.upload_from_file(csv_stream, content_type='text/csv')
+
+        print("uploaded")
+        print(len(T_sending), len(T_receiving), len(T_display))
+
+    Yc = torch.tensor([0, 0])
+
+    def MER():
+        print("MER Started")
+        global Yc
+        while True:
+            print("MER_stop", stop_event.is_set())
+            if stop_event.is_set():
+                return {"status": "Stopped"}, 200
+
+            with lock:
+                l = len(emotion_source)
+                print("MER", l)
+                if l >= 441000:
+                    ess = np.array(emotion_source[-441000:])
+                    del emotion_source[:-441000]
+                else:
+                    ess = np.zeros(441000)
+                    ess[:l] = np.array(emotion_source)
+            S = librosa.feature.melspectrogram(y=ess, sr=44100, n_mels=26, hop_length=441)
+            S_dB = librosa.power_to_db(S, ref=np.max)
+            zcr = librosa.feature.zero_crossing_rate(ess, hop_length=441)
+            mfccs = librosa.feature.mfcc(y=ess, sr=44100, n_mfcc=26, hop_length=441)
+            F = torch.tensor(np.stack([np.vstack((S_dB, zcr, mfccs))], axis=0))
+            F = [F[:, :, i * 100:i * 100 + 100] for i in range(10)]
+            F = torch.tensor(np.stack(F, axis=1))
+            X_recording.append(F)
+            Y = model(F.float())
+            with lock:
+                Yc = Y[0, :]
+                Y_recording.append(Yc)
+            print(Yc)
+            time.sleep(1)
+
+    def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
+        global feedback_value, Yc
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -258,107 +341,39 @@ def Processor_Creation():
         pitch_id = np.zeros(128)
         time_record = 0.0000001
         middle = [200, 200]
-        X_recording = []
-        Y_recording = []
-        emotion_source = []
-        EC=0
         ID = 1
         a = 0
         pitch_active = np.zeros(128)
         note_pic = []
-        note_pic_dead = []
         angle = np.linspace(0, 2 * math.pi, 360)
         radius = np.linspace(0, 200, 128)
-        Yc = torch.tensor([0,0])
+        print("process cycle start")
         while True:
             if stop_event.is_set():
                 if feedback_value != "cancel":
-                    print("sss",feedback_value)
-                    T = time.time()
-                    print('Stop time:',T)  # 确保这个打印语句可以执行
-                    print("Stop event is set. Performing cleanup and exiting.")
-                    X = torch.stack(X_recording, dim=0)
-                    Y = torch.stack(Y_recording, dim=0)
-                    E = feedback_value
-                    blob_path_X = f"{user_email}/{T}/X.pt"
-                    blob_path_Y = f"{user_email}/{T}/Y.pt"
-                    blob_path_E = f"{user_email}/{T}/E.txt"
-                    X_stream = io.BytesIO()
-                    Y_stream = io.BytesIO()
-                    E_stream = io.BytesIO()
-                    torch.save(X, X_stream)
-                    X_stream.seek(0)
-                    torch.save(Y, Y_stream)
-                    Y_stream.seek(0)
-                    E_stream.write(E.encode('utf-8'))
-                    E_stream.seek(0)
-                    blob_X = bucket.blob(blob_path_X)
-                    blob_Y = bucket.blob(blob_path_Y)
-                    blob_E = bucket.blob(blob_path_E)
-                    blob_X.upload_from_file(X_stream)
-                    blob_Y.upload_from_file(Y_stream)
-                    blob_E.upload_from_file(E_stream, content_type='text/plain')
-                    min_length = min(len(T_sending), len(T_receiving), len(T_display))
-                    T_sending_F = T_sending[:min_length]
-                    T_receiving_F = T_receiving[:min_length]
-                    T_display_F = T_display[:min_length]
-                    csv_stream = io.BytesIO()
-                    text_stream = io.TextIOWrapper(csv_stream, encoding='utf-8', newline='')
-                    # 创建 CSV 写入器
-                    csv_writer = csv.writer(text_stream)
-                    # 写入 CSV 文件，行对行写入
-                    for i in range(min_length):
-                        csv_writer.writerow([T_sending[i], T_receiving[i], T_display[i]])
-
-                    # 刷新 TextIOWrapper 缓存并重置 BytesIO 流的位置
-                    text_stream.flush()
-                    csv_stream.seek(0)
-                    blob_path_TD = f"{user_email}/{T}/Time_recording.csv"
-                    blob_TD = bucket.blob(blob_path_TD)
-                    blob_TD.upload_from_file(csv_stream, content_type='text/csv')
-
-                    print("uploaded")  # 确保这个打印语句可以执行
-                    print(len(T_sending),len(T_receiving),len(T_display))
+                    database_upload(user_email)
+                print("sss", feedback_value)
+                T = time.time()
+                print('Stop time:', T)
+                print("Stop event is set. Performing cleanup and exiting.")
                 stop_event.clear()
                 processing_event.clear()
+                mer_event.clear()
                 return {"status": "Stopped"}, 200
             with lock:
                 l = len(long_term_store)
             if l >= 4410:
-                #heart_beat = time.time()
                 with lock:
                     short_term_store = long_term_store[:4410]
                     del long_term_store[:4410]
+
                     T_receiving.append(time.time())
                     emotion_source.extend(short_term_store)
-                    print("emotion_source", len(emotion_source))
-                    EC+=1
-                    print("cut", l, len(long_term_store))
-                pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441,threshold=0.5)
+
+                print("cut", l, len(long_term_store))
+                pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
-                if EC==10:
-                    print("MER")
-                    EC = 0
-                    if len(emotion_source) >= 441000:
-                        ess = np.array(emotion_source)
-                    else:
-                        ess=np.zeros(441000)
-                        ess[-len(emotion_source):] = np.array(emotion_source)
-                    S = librosa.feature.melspectrogram(y=ess, sr=44100, n_mels=26, hop_length=441)
-                    S_dB = librosa.power_to_db(S, ref=np.max)
-                    zcr = librosa.feature.zero_crossing_rate(ess, hop_length=441)
-                    mfccs = librosa.feature.mfcc(y=ess, sr=44100, n_mfcc=26, hop_length=441)
-                    F = torch.tensor(np.stack([np.vstack((S_dB, zcr, mfccs))], axis=0))
-                    F = [F[ :, :, i * 100:i * 100 + 100] for i in range(10)]
-                    F = torch.tensor(np.stack(F, axis=1))
-                    X_recording.append(F)
-                    Y = model(F.float())
-                    Y_recording.append(Y)
-                    Yc = Y[0, :]
-                    print(Yc)
-                    if len(emotion_source) >= 441000:
-                        with lock:
-                            del emotion_source[44100:]
+
                 for j in range(pitches.shape[1]):
                     current_time = pitch_times[j] + time_record
                     for i in range(pitches.shape[0]):
@@ -368,28 +383,25 @@ def Processor_Creation():
                             if pitch_mag[midi_note] < magnitudes[i, j]:
                                 pitch_mag[midi_note] = magnitudes[i, j]
 
-                    # 更新所有音符圆的信息
-                    if j % pitches.shape[1] == 0:  # per 0.1s
+                    if j % pitches.shape[1] == 0:  # 每0.1s更新音符圆的信息
                         count_T += 0.1
                         for p in range(128):
-                            if pitch_active[p] == 0 and pitch_record[p] != 0:  # 需要消除的圆（已结束的音）
-                                note_pic_dead += [item for item in note_pic if item["id"] == pitch_id[p]]
-                                note_pic = [item for item in note_pic if (item["id"] != pitch_id[p]) & item["life"]>=0]
+                            if pitch_active[p] == 0 and pitch_record[p] != 0:
                                 pitch_id[p] = 0
                                 pitch_record[p] = 0
 
+                            if pitch_active[p] != 0 and pitch_record[p] != 0:
+                                for element in note_pic:
+                                    if element["pitch"] == p:
+                                        element["life"] += 1
+
                         for element in note_pic:
                             element["size"] += 0.5
-                            element["opacity"] -= 0.02
-                            if element["opacity"] < 0:
-                                element["opacity"] = 0
-                            element["life"]-=0
-
-
-
+                            element["life"] -= 1
+                            element["opacity"] = 1 - (10 - element["life"]) * 0.1
+                        note_pic = [item for item in note_pic if item['life'] > 0]
                         for p in range(128):
                             if pitch_active[p] != 0 and pitch_record[p] == 0 and current_time - pitch_record[p] > 0.05:
-                                # 新产生的圆（新出现的音）
                                 if a < 360:
                                     angle_N = angle[a]
                                     a += 1
@@ -400,19 +412,21 @@ def Processor_Creation():
                                 radius_N = radius[p]
                                 x = middle[0] + radius_N * math.cos(angle_N)
                                 y = middle[1] + radius_N * math.sin(angle_N)
-                                s = 0
-                                if ((Yc[0] < 0) & (Yc[1] < 0)) & ((Yc[0] < -0.1) | (Yc[1] < -0.1)):  # Sad / Bored
-                                    s = 0
-                                elif ((Yc[0] < 0) & (Yc[1] > 0)) & ((Yc[0] < -0.1) | (Yc[1] > 0.1)):  # Content / Relaxed
-                                    s = 1
-                                elif ((Yc[0] > 0) & (Yc[1] < 0)) & ((Yc[0] > 0.1) | (Yc[1] < -0.1)):  # Angry / Frustrated
-                                    s = 2
-                                elif ((Yc[0] > 0) & (Yc[1] > 0)) & ((Yc[0] > 0.1) | (Yc[1] > 0.1)):  # Excited / Happy
-                                    s = 3
+                                with lock:
+                                    print("Processor receive",Yc)
+                                    Ycc = Yc
+                                if ((Ycc[0] < 0) & (Ycc[1] < 0)) & ((Ycc[0] < -0.1) | (Ycc[1] < -0.1)):
+                                    s = 0  # Sad / Bored
+                                elif ((Ycc[0] < 0) & (Ycc[1] > 0)) & ((Ycc[0] < -0.1) | (Ycc[1] > 0.1)):
+                                    s = 1  # Content / Relaxed
+                                elif ((Ycc[0] > 0) & (Ycc[1] < 0)) & ((Ycc[0] > 0.1) | (Ycc[1] < -0.1)):
+                                    s = 2  # Angry / Frustrated
+                                elif ((Ycc[0] > 0) & (Ycc[1] > 0)) & ((Ycc[0] > 0.1) | (Ycc[1] > 0.1)):
+                                    s = 3  # Excited / Happy
                                 else:
-                                    s = 4
-                                Emotion = "Sad / Bored" if s == 0 else "Content / Relaxed" if s == 1 else "Angry / Frustrated" if s == 2 else "Excited / Happy"\
-                                    if s == 3 else "neutral"
+                                    s = 4  # neutral
+
+                                Emotion = "Sad / Bored" if s == 0 else "Content / Relaxed" if s == 1 else "Angry / Frustrated" if s == 2 else "Excited / Happy" if s == 3 else "neutral"
 
                                 Hue_Base = user_hue_base
                                 Saturation_Base = user_sat_base
@@ -425,15 +439,13 @@ def Processor_Creation():
                                 Coff = [1, 1, 1]
 
                                 H = Base[0] + int((p % 16) * Control_Range[0]) * Coff[0]
-                                Hue =  H if H<360 else 360-H
-                                Saturation = (Base[1] + abs(Yc[0])* max(pitch_mag[p]/50,2) * Control_Range[1]) * Coff[1]
-                                Lightness = (Base[2] + abs(Yc[1]) * max(pitch_mag[p]/50,2) * Control_Range[2]) * Coff[2]
+                                Hue = H if H < 360 else 360 - H
+                                Saturation = (Base[1] + abs(Yc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
+                                Lightness = (Base[2] + abs(Yc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
 
-                                color = (
-                                    f"hsl({Hue},"
-                                    f"{Saturation}%,"
-                                    f"{Lightness}%)")
-                                size = min(pitch_mag[p] / 10, 50)  # 初始圆的尺寸
+                                color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
+                                print(pitch_mag[p])
+                                size = min( pitch_mag[p]/5 , 50)
                                 note_pic.append({
                                     "id": ID,
                                     "pitch": p,
@@ -445,7 +457,7 @@ def Processor_Creation():
                                     "emotion": Emotion,
                                     "arousal": Yc[0].float().item(),
                                     "valence": Yc[1].float().item(),
-                                    "life": 20
+                                    "life": 10
                                 })
                                 pitch_id[p] = ID
                                 pitch_record[p] = current_time
@@ -455,7 +467,7 @@ def Processor_Creation():
                         send_to_clients(f"data: {json_data}\n\n")
                         pitch_active = np.zeros(128)
                         pitch_mag = np.zeros(128)
-                        d_time = time.time() - (T_start+count_T)
+                        d_time = time.time() - (T_start + count_T)
                         if d_time < 0.1:
                             time.sleep(0.1 - d_time)
                 time_record += pitch_times[-1]
@@ -463,8 +475,7 @@ def Processor_Creation():
             else:
                 time.sleep(0.1)  # 等待更多数据到达
                 T = time.time()
-                print("wait",T)
-
+                print("wait", T)
 
     def Simulator():
         ssr = 4410
@@ -481,23 +492,23 @@ def Processor_Creation():
                 l = len(long_term_store)
                 long_term_store.extend(data)
                 T_sending.append(time.time())
-                print("append",l,len(long_term_store))
+                print("append", l, len(long_term_store))
             D_time = time.time() - start_time
             if D_time < 0.1:
                 time.sleep(0.1 - D_time)
 
-
-    @app.route('/stop',methods =['GET','POST'])
+    @app.route('/stop', methods=['GET', 'POST'])
     @login_required
     def stop():
         global feedback_value
         long_term_store.clear()
         stop_event.set()
         processing_event.set()
+        mer_event.set()
         with lock:
             feedback_value = request.args.get('value')
 
-        print("Stop event set")  # 添加打印以确认事件被设置
+        print("Stop event set")
         return render_template('C_index.html', user=current_user)
 
     @app.route('/upload', methods=['POST'])
@@ -512,31 +523,26 @@ def Processor_Creation():
             flash('No selected file')
             return render_template('C_index.html', user=current_user)
         if file:
-            #filename =file.filename
-            #file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            #file.save(file_path)
             file_content = file.read()
             audio, sr = librosa.load(io.BytesIO(file_content), sr=44100)
             print(audio.shape)
             flash('File successfully uploaded')
-            print(processing_event.is_set())
-            print(simulator.is_set())
             if not processing_event.is_set():
-                processing_event.set()  # 标记处理事件为已设置
+                processing_event.set()
+                mer_event.set()
                 user_email = current_user.user_email
                 user_hue_base = current_user.user_hue_base
                 user_sat_base = current_user.user_sat_base
                 user_lig_base = current_user.user_lig_base
-                threading.Thread(target=process_data,args=(user_email,user_hue_base,user_sat_base,user_lig_base)).start()
+                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
+                threading.Thread(target=MER, args=()).start()
             if not simulator.is_set():
                 simulator.set()
                 threading.Thread(target=Simulator).start()
             print("Started")
-            return jsonify({'message' : "Start"}),200
-            #return render_template('C_index.html', user=current_user)
+            return jsonify({'message': "Start"}), 200
 
-
-    @app.route('/micro_received',methods=['POST'])
+    @app.route('/micro_received', methods=['POST'])
     @login_required
     def micro_received():
         audio_file = request.files['audio']
@@ -547,16 +553,20 @@ def Processor_Creation():
         with lock:
             l = len(long_term_store)
             long_term_store.extend(Data)
-            print("append",l,len(long_term_store))
+            print("append", l, len(long_term_store))
             T_sending.append(time.time())
+
         if not processing_event.is_set():
-            processing_event.set()  # 标记处理事件为已设置
+            processing_event.set()
+            mer_event.set()
             user_email = current_user.user_email
             user_hue_base = current_user.user_hue_base
             user_sat_base = current_user.user_sat_base
             user_lig_base = current_user.user_lig_base
-            threading.Thread(target=process_data, args=(user_email,user_hue_base,user_sat_base,user_lig_base)).start()
-
+            threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
+            print("process engaged")
+            threading.Thread(target=MER, args=()).start()
+            print("MER engaged")
         return jsonify({'message': 'Audio data received successfully'})
 
     return app
