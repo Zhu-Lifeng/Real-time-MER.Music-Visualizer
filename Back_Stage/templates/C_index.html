@@ -243,31 +243,52 @@
             var arousalValue = document.getElementById("arousalValue");
             var valenceValue = document.getElementById("valenceValue");
             var eventSource = new EventSource("/register_client");
-
+            var activeCircles = {};
             eventSource.onmessage = function(event) {
                 var data = JSON.parse(event.data);
+                var currentIds = {};
 
                 data.forEach(function(circle) {
-                    var existingCircle = document.getElementById("circle-" + circle.id);
-                    if (existingCircle) {
-                        existingCircle.setAttribute("cx", circle.x);
-                        existingCircle.setAttribute("cy", circle.y);
-                        existingCircle.setAttribute("r", circle.size);
-                        existingCircle.setAttribute("fill", circle.color);
-                        existingCircle.setAttribute("opacity", circle.opacity);
-                    } else {
-                        var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                        newCircle.setAttribute("id", "circle-" + circle.id);
-                        newCircle.setAttribute("cx", circle.x);
-                        newCircle.setAttribute("cy", circle.y);
-                        newCircle.setAttribute("r", circle.size);
-                        newCircle.setAttribute("fill", circle.color);
-                        newCircle.setAttribute("opacity", circle.opacity);
-                        svg.appendChild(newCircle);
-                    }
-                });
+        var existingCircle = document.getElementById("circle-" + circle.id);
 
+        currentIds[circle.id] = true;  // 记录当前存在的圆的ID
 
+        if (existingCircle) {
+            // 更新已有圆的属性
+            existingCircle.setAttribute("cx", circle.x);
+            existingCircle.setAttribute("cy", circle.y);
+            existingCircle.setAttribute("r", circle.size);
+            existingCircle.setAttribute("fill", circle.color);
+            existingCircle.setAttribute("opacity", circle.opacity);
+        } else {
+            // 创建新的圆形元素
+            var newCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            newCircle.setAttribute("id", "circle-" + circle.id);
+            newCircle.setAttribute("cx", circle.x);
+            newCircle.setAttribute("cy", circle.y);
+            newCircle.setAttribute("r", circle.size);
+            newCircle.setAttribute("fill", circle.color);
+            newCircle.setAttribute("opacity", circle.opacity);
+            svg.appendChild(newCircle);
+        }
+
+        // 记录当前存在的圆
+        activeCircles[circle.id] = true;
+    });
+        Object.keys(activeCircles).forEach(function(id) {
+        if (!currentIds[id]) {
+            // 如果当前ID没有在新的数据中出现，表示该圆需要被移除
+            var disappearingCircle = document.getElementById("circle-" + id);
+
+            if (disappearingCircle) {
+                // 直接移除圆形元素
+                disappearingCircle.parentNode.removeChild(disappearingCircle);
+            }
+
+            // 移除该ID的记录
+            delete activeCircles[id];
+        }
+    });
 
                 if (data.length) {
                     var latestData = data[data.length - 1];
