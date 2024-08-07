@@ -12,4 +12,3 @@ openpyxl
 requests
 pymysql
 firebase_admin
-redis
