@@ -86,7 +86,7 @@ def Processor_Creation():
     feedback_value = ""
     X_recording = []
     Y_recording = []
-
+    Yc = torch.tensor([0, 0])
     processing_event = threading.Event()
     mer_event = threading.Event()
     simulator = threading.Event()
@@ -297,7 +297,7 @@ def Processor_Creation():
         print("uploaded")
         print(len(T_sending), len(T_receiving), len(T_display))
 
-    Yc = torch.tensor([0, 0])
+
 
     def MER():
         print("MER Started")
@@ -445,7 +445,7 @@ def Processor_Creation():
 
                                 color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
                                 print(pitch_mag[p])
-                                size = min( pitch_mag[p]/5 , 50)
+                                size = min( max(pitch_mag[p]/5,1) , 50)
                                 note_pic.append({
                                     "id": ID,
                                     "pitch": p,
