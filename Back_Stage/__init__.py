@@ -54,28 +54,6 @@ def Processor_Creation():
             print(f"Error ensuring users collection: {e}")
 
     ensure_users_collection()
-
-    from .user_class import User
-
-    @login_manager.user_loader
-    def load_user(user_id):
-        user_ref = db.collection('users').document(user_id)
-        user = user_ref.get()
-        if user.exists:
-            user_data = user.to_dict()
-            return User(
-                user_id=user.id,
-                user_email=user_data['user_email'],
-                user_name=user_data['user_name'],
-                user_password=user_data['user_password'],
-                user_age=user_data.get('user_age'),
-                user_gender=user_data.get('user_gender'),
-                user_hue_base=user_data.get('user_hue_base'),
-                user_sat_base=user_data.get('user_sat_base'),
-                user_lig_base=user_data.get('user_lig_base')
-            )
-        return None
-
     long_term_store = []
     clients = []
     outputting = []
@@ -97,6 +75,28 @@ def Processor_Creation():
     pca_paths = ['Back_Stage/pca1_10s_100.pkl']
     model.load_model(model_path, pca_paths)
     model.eval()
+    from .user_class import User
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        user_ref = db.collection('users').document(user_id)
+        user = user_ref.get()
+        if user.exists:
+            user_data = user.to_dict()
+            return User(
+                user_id=user.id,
+                user_email=user_data['user_email'],
+                user_name=user_data['user_name'],
+                user_password=user_data['user_password'],
+                user_age=user_data.get('user_age'),
+                user_gender=user_data.get('user_gender'),
+                user_hue_base=user_data.get('user_hue_base'),
+                user_sat_base=user_data.get('user_sat_base'),
+                user_lig_base=user_data.get('user_lig_base')
+            )
+        return None
+
+
 
     @app.route('/')
     def index():
