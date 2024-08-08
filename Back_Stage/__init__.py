@@ -364,7 +364,11 @@ def Processor_Creation():
                 stop_event.clear()
                 processing_event.clear()
                 mer_event.clear()
-                return {"status": "Stopped"}, 200
+                with app.app_context():
+                    return jsonify({"message":"all_down",
+                                "start_time":T_sending,
+                                "receiving_time":T_receiving,
+                                "display_time":T_display})
             with lock:
                 l = len(long_term_store)
             if l >= 4410:
