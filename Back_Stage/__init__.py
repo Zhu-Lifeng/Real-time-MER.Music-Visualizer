@@ -516,7 +516,7 @@ def Processor_Creation():
                 min_length = min(len(T_sending), len(T_receiving), len(T_display))
                 del T_sending[min_length-1:]
                 del T_receiving[:min_length-1:]
-                del T_display[:min_length-1:]
+                del T_display[min_length-1:]
                 print(T_sending[-1],T_receiving[-1],T_display[-1])
                 print(T_receiving[-1]-T_sending[-1],T_display[-1]-T_sending[-1])
                 return jsonify({"message": "all_down",
