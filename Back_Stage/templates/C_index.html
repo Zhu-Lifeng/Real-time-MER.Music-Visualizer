@@ -374,14 +374,38 @@
             }
         }
 
-        var options = document.getElementsByClassName("option");
-        for (var i = 0; i < options.length; i++) {
-            options[i].onclick = function() {
-                var value = this.getAttribute("data-value");
-                var url = "/stop?value=" + value;
-                window.location.href = url;
+var options = document.getElementsByClassName("option");
+for (var i = 0; i < options.length; i++) {
+    options[i].onclick = function() {
+        var value = this.getAttribute("data-value");
+        var url = "/stop";
+        // 使用fetch API发送POST请求
+        fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ value: value }) // 将数据作为JSON发送
+        })
+        .then(response => response.json()) // 解析JSON响应
+        .then(data => {
+            console.log(data); // 在控制台打印服务器返回的JSON响应
+
+            // 根据响应内容刷新页面或执行其他操作
+            if (data.message === "all_down") {
+                // 刷新页面
+                window.location.reload();
+
+                // 或者重定向到另一个页面
+                // window.location.href = '/new_page';
             }
-        }
+        })
+        .catch(error => {
+            console.error("Error:", error); // 在控制台打印错误信息
+        });
+    }
+}
+
 const startButton = document.getElementById('startRecordingButton');
 const stopButton = document.getElementById('stopRecordingButton');
 
@@ -415,7 +439,6 @@ async function startRecording() {
                 .then(data => console.log(data))
                 .catch(error => console.error('Error:', error));
 
-                // 清理已上传的0.1秒音频数据
                 recorder.clear(); // 清除已处理的音频数据
                 recorder.record(); // 继续录音
             });
@@ -450,6 +473,5 @@ stopButton.addEventListener('click', stopRecording);
 
 
     </script>
-
 </body>
 </html>
