@@ -25,7 +25,7 @@ def Processor_Creation():
     login_manager.init_app(app)
 
     # Initialize Firestore
-    cred = credentials.Certificate('phonic-botany-428915-s3-47cc5c28ee4c.json')
+    cred = credentials.Certificate('phonic-botany-428915-s3-ddf10909864e.json')
     firebase_admin.initialize_app(cred)
     db = firestore.client()
 
