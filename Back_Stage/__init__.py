@@ -82,7 +82,7 @@ def Processor_Creation():
     T_receiving = []
     T_display = []
     emotion_source = []
-    feedback_value = ""
+    feedback_value = {'value':""}
     X_recording = []
     Y_recording = []
     Y_c = {"value" : [0, 0]}
@@ -260,7 +260,7 @@ def Processor_Creation():
         T = time.time()
         X = torch.stack(X_recording, dim=0)
         Y = torch.stack(Y_recording, dim=0)
-        E = feedback_value
+        E = feedback_value['value']
         blob_path_X = f"{user_email}/{T}/X.pt"
         blob_path_Y = f"{user_email}/{T}/Y.pt"
         blob_path_E = f"{user_email}/{T}/E.txt"
@@ -334,8 +334,6 @@ def Processor_Creation():
             time.sleep(1-(Start_time-time.time()))
 
     def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
-        global feedback_value
-
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -355,20 +353,16 @@ def Processor_Creation():
         print("process cycle start")
         while True:
             if stop_event.is_set():
-                if feedback_value != "cancel":
+                if feedback_value['value'] != "cancel":
                     database_upload(user_email)
-                print("sss", feedback_value)
+                print("sss", feedback_value['value'])
                 T = time.time()
                 print('Stop time:', T)
                 print("Stop event is set. Performing cleanup and exiting.")
                 stop_event.clear()
                 processing_event.clear()
                 mer_event.clear()
-                with app.app_context():
-                    return jsonify({"message":"all_down",
-                                "start_time":T_sending,
-                                "receiving_time":T_receiving,
-                                "display_time":T_display})
+                return {"status": "Stopped"}, 200
             with lock:
                 l = len(long_term_store)
             if l >= 4410:
@@ -507,16 +501,20 @@ def Processor_Creation():
     @app.route('/stop', methods=['GET', 'POST'])
     @login_required
     def stop():
-        global feedback_value
         long_term_store.clear()
         stop_event.set()
         processing_event.set()
         mer_event.set()
         with lock:
-            feedback_value = request.args.get('value')
-
-        print("Stop event set")
-        return render_template('C_index.html', user=current_user)
+            feedback_value['value'] = request.json.get('value')
+            print('feedback',feedback_value['value'])
+        while True:
+            if not processing_event.is_set():
+                print("Stop event set")
+                return jsonify({"message" : "all_down",
+                                        "start_time":T_sending,
+                                        "receiving_time":T_receiving,
+                                        "display_time":T_display})
 
     @app.route('/upload', methods=['POST'])
     @login_required
