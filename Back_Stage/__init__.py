@@ -236,6 +236,7 @@ def Processor_Creation():
 
     def MER():
         print("MER Started")
+        
         while True:
             mer=0
             Start_time=time.time()
@@ -244,7 +245,6 @@ def Processor_Creation():
 
             with lock:
                 l = len(emotion_source)
-                print("MER", l)
                 if l >= 441000:
                     mer=1
                     ess = np.array(emotion_source[-441000:])
@@ -266,7 +266,6 @@ def Processor_Creation():
                 Y_recording.append(Y[0, :])
                 with lock:
                     Y_c["value"] = Y[0, :].tolist()
-                    print(Y_c)
             time.sleep(1-(Start_time-time.time()))
 
     def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
@@ -306,13 +305,11 @@ def Processor_Creation():
                     T_receiving.append(time.time())
                     emotion_source.extend(short_term_store)
                 EC+=1
-                #print("cut", l, len(long_term_store))
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
                 if EC==10:
                     with lock:
                         Ycc = Y_c['value']
-                    print(Ycc)
                     EC = 0
                 for j in range(pitches.shape[1]):
                     current_time = pitch_times[j] + time_record
@@ -497,7 +494,6 @@ def Processor_Creation():
         y, sr = librosa.load(audio_stream)
         yy = librosa.resample(y, orig_sr=sr, target_sr=44100)
         audio_memory.extend(yy)
-        print(len(audio_memory))
         if len(audio_memory) >= 4410:
             Data = audio_memory[-4410:]
             del audio_memory[-4410:]
