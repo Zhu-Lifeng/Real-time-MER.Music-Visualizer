@@ -82,6 +82,7 @@ def Processor_Creation():
     T_receiving = []
     T_display = []
     emotion_source = []
+    audio_memory = []
     feedback_value = {'value':""}
     X_recording = []
     Y_recording = []
@@ -473,10 +474,11 @@ def Processor_Creation():
                         if d_time < 0.1:
                             time.sleep(0.1 - d_time)
                 time_record += pitch_times[-1]
-                T_display.append(time.time())
+                with lock:
+                    T_display.append(time.time())
             else:
                 time.sleep(0.1)  # 等待更多数据到达
-                T = time.time()
+
 
 
     def Simulator():
@@ -506,12 +508,18 @@ def Processor_Creation():
         processing_event.set()
         mer_event.set()
         with lock:
-            feedback_value['value'] = request.json.get('value')
+            feedback_value['value'] = request.get_json().get('value')
             print('feedback',feedback_value['value'])
         while True:
             if not processing_event.is_set():
                 print("Stop event set")
-                return jsonify({"message" : "all_down",
+                min_length = min(len(T_sending), len(T_receiving), len(T_display))
+                del T_sending[min_length-1:]
+                del T_receiving[:min_length-1:]
+                del T_display[:min_length-1:]
+                print(T_sending[-1],T_receiving[-1],T_display[-1])
+                print(T_receiving[-1]-T_sending[-1],T_display[-1]-T_sending[-1])
+                return jsonify({"message": "all_down",
                                         "start_time":T_sending,
                                         "receiving_time":T_receiving,
                                         "display_time":T_display})
@@ -554,23 +562,28 @@ def Processor_Creation():
         audio_data = audio_file.read()
         audio_stream = io.BytesIO(audio_data)
         y, sr = librosa.load(audio_stream)
-        Data = librosa.resample(y, orig_sr=sr, target_sr=44100)
-        with lock:
-            l = len(long_term_store)
-            long_term_store.extend(Data)
-            T_sending.append(time.time())
+        yy = librosa.resample(y, orig_sr=sr, target_sr=44100)
+        audio_memory.extend(yy)
+        print(len(audio_memory))
+        if len(audio_memory) >= 4410:
+            Data = audio_memory[-4410:]
+            del audio_memory[-4410:]
+            with lock:
+                long_term_store.extend(Data)
+                T_sending.append(time.time())
 
-        if not processing_event.is_set():
-            processing_event.set()
-            mer_event.set()
-            user_email = current_user.user_email
-            user_hue_base = current_user.user_hue_base
-            user_sat_base = current_user.user_sat_base
-            user_lig_base = current_user.user_lig_base
-            threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
-            print("process engaged")
-            threading.Thread(target=MER, args=()).start()
-            print("MER engaged")
+            if not processing_event.is_set():
+                processing_event.set()
+                mer_event.set()
+                user_email = current_user.user_email
+                user_hue_base = current_user.user_hue_base
+                user_sat_base = current_user.user_sat_base
+                user_lig_base = current_user.user_lig_base
+                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
+                print("process engaged")
+                threading.Thread(target=MER, args=()).start()
+                print("MER engaged")
+
         return jsonify({'message': 'Audio data received successfully'})
 
     return app
