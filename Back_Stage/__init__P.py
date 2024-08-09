@@ -1,6 +1,6 @@
 import csv
 import queue
-from flask import Flask, render_template, request, Response, jsonify, flash, url_for, redirect
+from flask import Flask, render_template, request, Response, jsonify, flash, url_for, redirect, session
 from flask_login import UserMixin, LoginManager, login_user, login_required, current_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import numpy as np
@@ -10,7 +10,7 @@ import json
 import time
 import math
 import torch
-import os
+import uuid
 import io
 from .MER_model import RCNN, DynamicPCALayer_Seq
 import firebase_admin
@@ -23,6 +23,8 @@ def Processor_Creation():
     login_manager = LoginManager()
     login_manager.login_view = 'login'
     login_manager.init_app(app)
+
+    user_data = {}
 
     # Initialize Firestore
     cred = credentials.Certificate('phonic-botany-428915-s3-ddf10909864e.json')
@@ -76,21 +78,36 @@ def Processor_Creation():
             )
         return None
 
-    long_term_store = []
-    clients = []
-    T_sending = []
-    T_receiving = []
-    T_display = []
-    emotion_source = []
-    audio_memory = []
-    feedback_value = {'value':""}
-    X_recording = []
-    Y_recording = []
-    Y_c = {"value" : [0, 0]}
-    processing_event = threading.Event()
-    mer_event = threading.Event()
-    simulator = threading.Event()
-    stop_event = threading.Event()
+    def get_user_uid():
+        # 检查 session 中是否已经有 user_uid
+        if 'user_uid' not in session:
+            # 如果没有，生成一个新的唯一编号并保存到 session 中
+            session['user_uid'] = str(uuid.uuid4())  # 生成唯一的用户编号
+        return session['user_uid']
+
+    def get_or_create_user_data(user_uid):
+        if user_uid not in user_data:
+            user_data[user_uid] = {
+                'long_term_store': [],
+                'clients': [],
+                'T_sending': [],
+                'T_receiving': [],
+                'T_display': [],
+                'X_recording': [],
+                'Y_recording': [],
+                'emotion_source': [],
+                'Y_c': {"value": [0, 0]},
+                'audio_memory': [],
+                'feedback_value': {'value': ""},
+                'audio': None,
+                'processing_event': threading.Event(),
+                'mer_event': threading.Event(),
+                'simulator_event': threading.Event(),
+                'stop_event': threading.Event()
+            }
+        return user_data[user_uid]
+
+
     lock = threading.Lock()
     model = RCNN()
     model_path = 'Back_Stage/best_model_10s_100.pth'
@@ -100,7 +117,9 @@ def Processor_Creation():
 
     @app.route('/')
     def index():
-        return render_template('start.html')
+        user_uid = get_user_uid()
+        user_info = get_or_create_user_data(user_uid)
+        return render_template('start.html', user_uid=user_uid, user_info=user_info)
 
     @app.route('/main')
     @login_required
@@ -219,49 +238,50 @@ def Processor_Creation():
     @app.route('/logout')
     @login_required
     def logout():
-        long_term_store.clear()
-        stop_event.set()
+        user_uid = get_user_uid()
+        user_info = get_or_create_user_data(user_uid)
+        user_info['long_term_store'].clear()
+        user_info['stop_event'].set()
         logout_user()
         return redirect(url_for('index'))
 
-    def send_to_clients(data):
+    def send_to_clients(data, user_info):
         dead_clients = []
-        for client in clients:
+        for client in user_info['clients']:
             try:
                 client.put(data)
             except Exception as e:  # 如果发送失败，假设客户端已断开
                 dead_clients.append(client)
         for client in dead_clients:
-            clients.remove(client)
+            user_info['clients'].remove(client)
 
     @app.route('/register_client')
-    @login_required
     def register_client():
+        user_uid = get_user_uid()
+        print(user_uid)
+        user_info = get_or_create_user_data(user_uid)
+
         def gen():
             q = queue.Queue()
-            clients.append(q)
+            user_info['clients'].append(q)
 
             try:
                 while True:
                     try:
                         data = q.get(timeout=3000)  # 设置超时以避免长时间阻塞
-
                         yield data
-
                     except queue.Empty:
-                        # 如果超时没有数据，发送一个保持连接的心跳信号
                         yield 'data: {}\n\n'  # 发送空数据包来保持连接
             except GeneratorExit:
-                # 当客户端断开连接时，清理操作
-                clients.remove(q)
+                user_info['clients'].remove(q)
 
         return Response(gen(), mimetype='text/event-stream')
 
-    def database_upload(user_email):
+    def database_upload(user_email, user_info):
         T = time.time()
-        X = torch.stack(X_recording, dim=0)
-        Y = torch.stack(Y_recording, dim=0)
-        E = feedback_value['value']
+        X = torch.stack(user_info['X_recording'], dim=0)
+        Y = torch.stack(user_info['Y_recording'], dim=0)
+        E = user_info['feedback_value']['value']
         blob_path_X = f"{user_email}/{T}/X.pt"
         blob_path_Y = f"{user_email}/{T}/Y.pt"
         blob_path_E = f"{user_email}/{T}/E.txt"
@@ -280,13 +300,13 @@ def Processor_Creation():
         blob_X.upload_from_file(X_stream)
         blob_Y.upload_from_file(Y_stream)
         blob_E.upload_from_file(E_stream, content_type='text/plain')
-        min_length = min(len(T_sending), len(T_receiving), len(T_display))
+        min_length = min(len(user_info['T_sending']), len(user_info['T_receiving']), len(user_info['T_display']))
         csv_stream = io.BytesIO()
         text_stream = io.TextIOWrapper(csv_stream, encoding='utf-8', newline='')
         csv_writer = csv.writer(text_stream)
 
         for i in range(min_length):
-            csv_writer.writerow([T_sending[i], T_receiving[i], T_display[i]])
+            csv_writer.writerow([user_info['T_sending'][i], user_info['T_receiving'][i], user_info['T_display'][i]])
 
         text_stream.flush()
         csv_stream.seek(0)
@@ -295,30 +315,27 @@ def Processor_Creation():
         blob_TD.upload_from_file(csv_stream, content_type='text/csv')
 
         print("uploaded")
-        print(len(T_sending), len(T_receiving), len(T_display))
+        print(len(user_info['T_sending']), len(user_info['T_receiving']), len(user_info['T_display']))
 
-
-
-    def MER():
+    def MER(user_info):
         print("MER Started")
         while True:
-            mer=0
-            Start_time=time.time()
-            if stop_event.is_set():
+            mer = 0
+            Start_time = time.time()
+            if user_info['stop_event'].is_set():
                 return {"status": "Stopped"}, 200
 
             with lock:
-                l = len(emotion_source)
-                print("MER", l)
+                l = len(user_info['emotion_source'])
                 if l >= 441000:
-                    mer=1
-                    ess = np.array(emotion_source[-441000:])
-                    del emotion_source[:-44100*9]
+                    mer = 1
+                    ess = np.array(user_info['emotion_source'][-441000:])
+                    del user_info['emotion_source'][:-44100*9]
                 elif l >= 44100:
-                    mer=1
+                    mer = 1
                     ess = np.zeros(441000)
-                    ess[:l] = np.array(emotion_source)
-            if mer==1:
+                    ess[:l] = np.array(user_info['emotion_source'])
+            if mer == 1:
                 S = librosa.feature.melspectrogram(y=ess, sr=44100, n_mels=26, hop_length=441)
                 S_dB = librosa.power_to_db(S, ref=np.max)
                 zcr = librosa.feature.zero_crossing_rate(ess, hop_length=441)
@@ -326,15 +343,15 @@ def Processor_Creation():
                 F = torch.tensor(np.stack([np.vstack((S_dB, zcr, mfccs))], axis=0))
                 F = [F[:, :, i * 100:i * 100 + 100] for i in range(10)]
                 F = torch.tensor(np.stack(F, axis=1))
-                X_recording.append(F)
+                user_info['X_recording'].append(F)
                 Y = model(F.float())
-                Y_recording.append(Y[0, :])
+                user_info['Y_recording'].append(Y[0, :])
                 with lock:
-                    Y_c["value"] = Y[0, :].tolist()
-                    print(Y_c)
-            time.sleep(1-(Start_time-time.time()))
+                    user_info['Y_c']["value"] = Y[0, :].tolist()
+                    #print(user_info['Y_c'])
+            time.sleep(1 - (Start_time - time.time()))
 
-    def process_data(user_email, user_hue_base, user_sat_base, user_lig_base):
+    def process_data(user_email, user_hue_base, user_sat_base, user_lig_base, user_info):
         print("Process started")
         T_start = time.time()
         count_T = 0
@@ -345,41 +362,40 @@ def Processor_Creation():
         middle = [200, 200]
         ID = 1
         a = 0
-        EC=0
-        Ycc = Y_c['value']
+        EC = 0
+        Ycc = user_info['Y_c']['value']
         pitch_active = np.zeros(128)
         note_pic = []
         angle = np.linspace(0, 2 * math.pi, 360)
         radius = np.linspace(0, 200, 128)
         print("process cycle start")
         while True:
-            if stop_event.is_set():
-                if feedback_value['value'] != "cancel":
-                    database_upload(user_email)
-                print("sss", feedback_value['value'])
+            if user_info['stop_event'].is_set():
+                if user_info['feedback_value']['value'] != "cancel":
+                    database_upload(user_email, user_info)
+                print("sss", user_info['feedback_value']['value'])
                 T = time.time()
                 print('Stop time:', T)
                 print("Stop event is set. Performing cleanup and exiting.")
-                stop_event.clear()
-                processing_event.clear()
-                mer_event.clear()
+                user_info['stop_event'].clear()
+                user_info['processing_event'].clear()
+                user_info['mer_event'].clear()
                 return {"status": "Stopped"}, 200
             with lock:
-                l = len(long_term_store)
+                l = len(user_info['long_term_store'])
             if l >= 4410:
                 with lock:
-                    short_term_store = long_term_store[:4410]
-                    del long_term_store[:4410]
-                    T_receiving.append(time.time())
-                    emotion_source.extend(short_term_store)
-                EC+=1
-                #print("cut", l, len(long_term_store))
+                    short_term_store = user_info['long_term_store'][:4410]
+                    del user_info['long_term_store'][:4410]
+                    user_info['T_receiving'].append(time.time())
+                    user_info['emotion_source'].extend(short_term_store)
+                EC += 1
                 pitches, magnitudes = librosa.piptrack(y=np.array(short_term_store), sr=44100, hop_length=441, threshold=0.5)
                 pitch_times = librosa.times_like(pitches, sr=44100, hop_length=441)
-                if EC==10:
+                if EC == 10:
                     with lock:
-                        Ycc = Y_c['value']
-                    print(Ycc)
+                        Ycc = user_info['Y_c']['value']
+                    #print(Ycc)
                     EC = 0
                 for j in range(pitches.shape[1]):
                     current_time = pitch_times[j] + time_record
@@ -442,13 +458,13 @@ def Processor_Creation():
 
                                 Coff = [1, 1, 1]
 
-                                H = Base[0] + int((p % 16)/8* Control_Range[0]) * Coff[0]
+                                H = Base[0] + int((p % 16) / 8 * Control_Range[0]) * Coff[0]
                                 Hue = H if H < 360 else 360 - H
                                 Saturation = (Base[1] + abs(Ycc[0]) * max(pitch_mag[p] / 50, 2) * Control_Range[1]) * Coff[1]
                                 Lightness = (Base[2] + abs(Ycc[1]) * max(pitch_mag[p] / 50, 2) * Control_Range[2]) * Coff[2]
 
                                 color = f"hsl({Hue},{Saturation}%,{Lightness}%)"
-                                size = min( max(pitch_mag[p]/2.5 ,1), 50)
+                                size = min(max(pitch_mag[p] / 2.5, 1), 50)
                                 note_pic.append({
                                     "id": ID,
                                     "pitch": p,
@@ -467,7 +483,7 @@ def Processor_Creation():
                                 ID += 1
 
                         json_data = json.dumps(note_pic)
-                        send_to_clients(f"data: {json_data}\n\n")
+                        send_to_clients(f"data: {json_data}\n\n", user_info)
                         pitch_active = np.zeros(128)
                         pitch_mag = np.zeros(128)
                         d_time = time.time() - (T_start + count_T)
@@ -475,27 +491,25 @@ def Processor_Creation():
                             time.sleep(0.1 - d_time)
                 time_record += pitch_times[-1]
                 with lock:
-                    T_display.append(time.time())
+                    user_info['T_display'].append(time.time())
             else:
                 time.sleep(0.1)  # 等待更多数据到达
 
-
-
-    def Simulator():
+    def Simulator(user_info):
         ssr = 4410
+        audio = user_info['audio']
 
-        for t in range(len(audio) // ssr):  # 检查 notes_midi 是否为空
-            if stop_event.is_set():
-                if not processing_event.is_set():
-                    stop_event.clear()
-                simulator.clear()
+        for t in range(len(audio) // ssr):
+            if user_info['stop_event'].is_set():
+                if not user_info['processing_event'].is_set():
+                    user_info['stop_event'].clear()
+                user_info['simulator_event'].clear()
                 return {"status": "Stopped"}, 200
             start_time = time.time()
             data = audio[t * ssr:t * ssr + ssr].tolist()
             with lock:
-                l = len(long_term_store)
-                long_term_store.extend(data)
-                T_sending.append(time.time())
+                user_info['long_term_store'].extend(data)
+                user_info['T_sending'].append(time.time())
             D_time = time.time() - start_time
             if D_time < 0.1:
                 time.sleep(0.1 - D_time)
@@ -503,31 +517,34 @@ def Processor_Creation():
     @app.route('/stop', methods=['GET', 'POST'])
     @login_required
     def stop():
-        long_term_store.clear()
-        stop_event.set()
-        processing_event.set()
-        mer_event.set()
+        user_uid = get_user_uid()
+        user_info = get_or_create_user_data(user_uid)
+        user_info['long_term_store'].clear()
+        user_info['stop_event'].set()
+        user_info['processing_event'].set()
+        user_info['mer_event'].set()
         with lock:
-            feedback_value['value'] = request.get_json().get('value')
-            print('feedback',feedback_value['value'])
+            user_info['feedback_value']['value'] = request.get_json().get('value')
+            print('feedback', user_info['feedback_value']['value'])
         while True:
-            if not processing_event.is_set():
+            if not user_info['processing_event'].is_set():
                 print("Stop event set")
-                min_length = min(len(T_sending), len(T_receiving), len(T_display))
-                del T_sending[min_length-1:]
-                del T_receiving[min_length-1:]
-                del T_display[min_length-1:]
-                print(T_sending[-1],T_receiving[-1],T_display[-1])
-                print(T_receiving[-1]-T_sending[-1],T_display[-1]-T_sending[-1])
+                min_length = min(len(user_info['T_sending']), len(user_info['T_receiving']), len(user_info['T_display']))
+                del user_info['T_sending'][min_length-1:]
+                del user_info['T_receiving'][min_length-1:]
+                del user_info['T_display'][min_length-1:]
+                print(user_info['T_sending'][-1], user_info['T_receiving'][-1], user_info['T_display'][-1])
+                print(user_info['T_receiving'][-1]-user_info['T_sending'][-1], user_info['T_display'][-1]-user_info['T_sending'][-1])
                 return jsonify({"message": "all_down",
-                                        "start_time":T_sending,
-                                        "receiving_time":T_receiving,
-                                        "display_time":T_display})
+                                        "start_time": user_info['T_sending'],
+                                        "receiving_time": user_info['T_receiving'],
+                                        "display_time": user_info['T_display']})
 
     @app.route('/upload', methods=['POST'])
     @login_required
     def upload_file():
-        global audio, file_path
+        user_uid = get_user_uid()
+        user_info = get_or_create_user_data(user_uid)
         if 'file' not in request.files:
             flash('No file part')
             return render_template('C_index.html', user=current_user)
@@ -538,50 +555,51 @@ def Processor_Creation():
         if file:
             file_content = file.read()
             audio, sr = librosa.load(io.BytesIO(file_content), sr=44100)
-            print(audio.shape)
+            user_info['audio'] = audio
             flash('File successfully uploaded')
-            if not processing_event.is_set():
-                processing_event.set()
-                mer_event.set()
+            if not user_info['processing_event'].is_set():
+                user_info['processing_event'].set()
+                user_info['mer_event'].set()
                 user_email = current_user.user_email
                 user_hue_base = current_user.user_hue_base
                 user_sat_base = current_user.user_sat_base
                 user_lig_base = current_user.user_lig_base
-                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
-                threading.Thread(target=MER, args=()).start()
-            if not simulator.is_set():
-                simulator.set()
-                threading.Thread(target=Simulator).start()
+                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base, user_info)).start()
+                threading.Thread(target=MER, args=(user_info,)).start()
+            if not user_info['simulator_event'].is_set():
+                user_info['simulator_event'].set()
+                threading.Thread(target=Simulator, args=(user_info,)).start()
             print("Started")
             return jsonify({'message': "Start"}), 200
 
     @app.route('/micro_received', methods=['POST'])
     @login_required
     def micro_received():
+        user_uid = get_user_uid()
+        user_info = get_or_create_user_data(user_uid)
         audio_file = request.files['audio']
         audio_data = audio_file.read()
         audio_stream = io.BytesIO(audio_data)
         y, sr = librosa.load(audio_stream)
         yy = librosa.resample(y, orig_sr=sr, target_sr=44100)
-        audio_memory.extend(yy)
-        print(len(audio_memory))
-        if len(audio_memory) >= 4410:
-            Data = audio_memory[-4410:]
-            del audio_memory[-4410:]
+        user_info['audio_memory'].extend(yy)
+        if len(user_info['audio_memory']) >= 4410:
+            Data = user_info['audio_memory'][-4410:]
+            del user_info['audio_memory'][-4410:]
             with lock:
-                long_term_store.extend(Data)
-                T_sending.append(time.time())
+                user_info['long_term_store'].extend(Data)
+                user_info['T_sending'].append(time.time())
 
-            if not processing_event.is_set():
-                processing_event.set()
-                mer_event.set()
+            if not user_info['processing_event'].is_set():
+                user_info['processing_event'].set()
+                user_info['mer_event'].set()
                 user_email = current_user.user_email
                 user_hue_base = current_user.user_hue_base
                 user_sat_base = current_user.user_sat_base
                 user_lig_base = current_user.user_lig_base
-                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base)).start()
+                threading.Thread(target=process_data, args=(user_email, user_hue_base, user_sat_base, user_lig_base, user_info)).start()
                 print("process engaged")
-                threading.Thread(target=MER, args=()).start()
+                threading.Thread(target=MER, args=(user_info,)).start()
                 print("MER engaged")
 
         return jsonify({'message': 'Audio data received successfully'})
