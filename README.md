@@ -5,3 +5,5 @@ This framework invokes Cloud Storage and FireStore for back stage database const
 <p align='center'>
   <img width='700' src="https://github.com/Zhu-Lifeng/Real-time-MER.Music-Visualizer/blob/main/readme/Cloud Architecture.png" alt="Architecture">
 </p>
+
+# How to deploy
