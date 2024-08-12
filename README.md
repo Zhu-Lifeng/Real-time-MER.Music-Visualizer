@@ -1,2 +1,4 @@
-# Msc_Project_scoretracker
-This is a MSc Project focus on building a distributed system providing function as tracking the score automatically.
+<h1 align='center'>Real-time MER Music Visualizer Framework</h1>
+
+# Architecture 
+This framework invokes Cloud Storage and FireStore for back stage database construction and user account management. The framework itself is developed based on Flask.
