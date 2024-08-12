@@ -40,3 +40,18 @@ cd Real-time-MER.Music-Visualizer
 sudo docker build -t myapp .
 sudo docker run -p 8080:8080 myapp
 ```
+## 2. For server-less deployment
+### 1) enable the  Cloud Run API of GCP
+### 2) download and install Google Cloud SDK Shell
+### 3) login your GCP account in Google Cloud SDK Shell
+### 4) download the application files from git and enter its folder<br>
+
+```sh
+git clone https://github.com/Zhu-Lifeng/Real-time-MER.Music-Visualizer.git
+cd Real-time-MER.Music-Visualizer
+```
+
+### 5) deploy the service
+```sh
+gcloud run deploy --source . --memory 2Gi
+```
