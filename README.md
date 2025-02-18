@@ -1,5 +1,38 @@
 <h1 align='center'>Real-time MER Music Visualizer Framework</h1>
 
+# Directory Structure:
+```
+.
+├── README.md
+├── main.py
+├── requirements.txt
+├── Dockerfile
+├── .dockerignore
+├── Back_Stage
+│   ├── MER_model.py
+│   ├── _init_.py
+│   ├── _init_P.py
+│   ├── best_model_10s_100.pth
+│   ├── pca1_10s_100.pkl
+│   ├── user_class.py
+│   ├── static
+│   │   ├── background.jpg
+│   │   ├── js
+│   │   │   └── recorder.js
+│   ├── templates
+│   │   ├── C_index.html
+│   │   ├── filling.html
+│   │   ├── login.html
+│   │   ├── signup.html
+│   │   └── start.html
+├── MER model
+│   ├── DataSet Generator-10s-2626-100.ipynb
+│   ├── Model-Training10s-2626-100.ipynb
+└── readme
+│   └── Cloud Architecture.png
+```
+
+
 # Architecture 
 This framework invokes Cloud Storage and FireStore for back stage database construction and user account management. The framework itself is developed based on Flask.
 <p align='center'>
