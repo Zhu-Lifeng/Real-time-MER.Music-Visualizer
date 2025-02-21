@@ -39,6 +39,9 @@ This framework invokes Cloud Storage and FireStore for back stage database const
   <img width='700' src="https://github.com/Zhu-Lifeng/Real-time-MER.Music-Visualizer/blob/main/readme/Cloud Architecture.png" alt="Architecture">
 </p>
 
+# Dataset
+DEAM: https://cvml.unige.ch/databases/DEAM/
+
 # Project file instruction
 The MER model folder contains the file about the Music Emotion Recognizing model this project uses. It needs to be noticed that we use DEAM dataset as the orignal data source so it is required to be stored in the environment for the model related files to be used.
 
