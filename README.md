@@ -4,6 +4,7 @@
 ```
 .
 ├── README.md
+├── LICENSE
 ├── main.py
 ├── requirements.txt
 ├── Dockerfile
