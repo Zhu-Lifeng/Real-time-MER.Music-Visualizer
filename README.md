@@ -88,3 +88,9 @@ cd Real-time-MER.Music-Visualizer
 ```sh
 gcloud run deploy --source . --memory 2Gi
 ```
+
+# Developer
+Lifeng Zhu
+mail: dannyzhu.shu@gmail.com
+LinkedIn: www.linkedin.com/in/lifeng-zhu-180970290
+GitHub: 
